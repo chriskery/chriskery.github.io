@@ -23,12 +23,17 @@
 <meta property="og:site_name" content="Chriskery&#39;s Blog">
 <meta property="og:description" content="Linux 虚拟网络设备Linux Vethveth-pair顾名思义，veth-pair 就是一对的虚拟设备接口，和 tap&#x2F;tun 设备不同的是，它都是成对出现的。一端连着协议栈，一端彼此相连着。 一般用于跨 namespace 通信。  Linux 中默认不同 net namespace 设备无法通信。  网络命名空间为了支持网络协议栈的多个实例，Linux在网络栈中引入了网络命名">
 <meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic2.zhimg.com/v2-b3b33ed53fdfd86fff8ace576528f671_b.jpg">
+<meta property="og:image" content="https://pic2.zhimg.com/80/v2-b3b33ed53fdfd86fff8ace576528f671_1440w.webp">
+<meta property="og:image" content="https://pic3.zhimg.com/v2-f7891b35584bd9a960fb042e1a651206_b.jpg">
+<meta property="og:image" content="https://pic3.zhimg.com/80/v2-f7891b35584bd9a960fb042e1a651206_1440w.webp">
 <meta property="article:published_time" content="2023-11-29T14:45:32.000Z">
-<meta property="article:modified_time" content="2023-11-29T14:51:30.084Z">
+<meta property="article:modified_time" content="2023-11-29T15:06:59.516Z">
 <meta property="article:author" content="Chris Kery">
 <meta property="article:tag" content="linux">
 <meta property="article:tag" content="network">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pic2.zhimg.com/v2-b3b33ed53fdfd86fff8ace576528f671_b.jpg">
   
   
     <meta name="referrer" content="no-referrer-when-downgrade">
@@ -223,7 +228,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          3.7k 字
+          4.4k 字
         
       </span>
     
@@ -234,7 +239,7 @@
         
         
         
-          31 分钟
+          37 分钟
         
       </span>
     
@@ -344,6 +349,26 @@
 <h3 id="net-库"><a href="#net-库" class="headerlink" title="net 库"></a>net 库</h3><p>net 库是 Go 语言内置的库，提供了跨平台支持的网络地址处理，以及各种常见协议的IO支持，比如TCP、UDP、DNS、Unix Socket等。</p>
 <h3 id="netlink库"><a href="#netlink库" class="headerlink" title="netlink库"></a>netlink库</h3><p><a target="_blank" rel="noopener" href="https://github.com/vishvananda/netlink">netlink库</a> 是Go 语言的操作网络接口、路由表等配置的库 ，使用它的调用相当于我们通过 IP 命令去管理网络接口。</p>
 <h3 id="netns库"><a href="#netns库" class="headerlink" title="netns库"></a>netns库</h3><p><a target="_blank" rel="noopener" href="https://github.com/vishvananda/netns">netns库</a> 就是 Go 语言版的<code>ip netns exec</code> 命令实现。通过这个库可以让 netlink 库中配置网络接口的代码在某个容器的 Net amespace 中执行。</p>
+<h3 id="单节点容器相互访问"><a href="#单节点容器相互访问" class="headerlink" title="单节点容器相互访问"></a>单节点容器相互访问</h3><p><img src="https://pic2.zhimg.com/v2-b3b33ed53fdfd86fff8ace576528f671_b.jpg" srcset="/img/loading.gif" lazyload></p>
+<p><img src="https://pic2.zhimg.com/80/v2-b3b33ed53fdfd86fff8ace576528f671_1440w.webp" srcset="/img/loading.gif" lazyload></p>
+<p>veth pair的一端在network namespace中，另一端接在了linux bridge上，所以图中的veth00&#x2F;veth01就变为了从设备（linux bridge），即他们就变为了网线，没有了处理数据包的能力，只能转发数据包。</p>
+<p>以192.268.3.101（container1） → 192.268.3.106（container2）为例：</p>
+<p>1、 container1发送APR请求得到container2的mac地址</p>
+<p>2、 container1的这个请求出现在了docker0网桥</p>
+<p>3、 docker0网桥将ARP广播转发到其他接在docker0上的设备</p>
+<p>4、 container2收到这个ARP请求，响应给container1</p>
+<p>5、 container1拿到mac地址封装ICMP请求</p>
+<p>6、 同样这个请求也会经由docker0出现在宿主机上</p>
+<p>7、 docker0查到container2属于自己就转发给了container2</p>
+<h3 id="容器访问外部网络"><a href="#容器访问外部网络" class="headerlink" title="容器访问外部网络"></a>容器访问外部网络</h3><p><img src="https://pic3.zhimg.com/v2-f7891b35584bd9a960fb042e1a651206_b.jpg" srcset="/img/loading.gif" lazyload></p>
+<p><img src="https://pic3.zhimg.com/80/v2-f7891b35584bd9a960fb042e1a651206_1440w.webp" srcset="/img/loading.gif" lazyload></p>
+<p>以图中的container2要访问百度为例：</p>
+<p>1、 container2 ping 220.181.38.148</p>
+<p>2、 数据包同样会到达docker0网桥，即到达了宿主机</p>
+<p>3、宿主机发现目的目的网段要交给eth0处理</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs text">~# route -n<br>Kernel IP routing table<br>Destination     Gateway         Genmask         Flags Metric Ref    Use Iface<br>0.0.0.0         172.28.143.253  0.0.0.0         UG    100    0        0 eth0<br>172.17.0.0      0.0.0.0         255.255.0.0     U     0      0        0 docker0<br></code></pre></td></tr></table></figure>
+
+<p>4、 由于源ip是内网ip还要进行一个NAT，通过eth0发到外网</p>
 <p>转载自: <a target="_blank" rel="noopener" href="https://github.com/lixd/daily-notes/blob/master/Golang/mydocker/06-1-%E7%BD%91%E7%BB%9C%E8%99%9A%E6%8B%9F%E5%8C%96%E6%8A%80%E6%9C%AF.md">https://github.com/lixd/daily-notes/blob/master/Golang/mydocker/06-1-%E7%BD%91%E7%BB%9C%E8%99%9A%E6%8B%9F%E5%8C%96%E6%8A%80%E6%9C%AF.md</a></p>
 
                 
@@ -415,6 +440,12 @@
                 <div class="post-prevnext my-3">
                   <article class="post-prev col-6">
                     
+                    
+                      <a href="/2023/11/29/%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B/" title="容器网络模型">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">容器网络模型</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
                     
                   </article>
                   <article class="post-next col-6">
