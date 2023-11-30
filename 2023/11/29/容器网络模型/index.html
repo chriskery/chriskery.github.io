@@ -28,7 +28,7 @@
 <meta property="og:image" content="https://github.com/lixd/daily-notes/blob/master/Golang/mydocker/assets/%E7%BD%91%E7%BB%9C%E5%88%A0%E9%99%A4%E6%B5%81%E7%A8%8B.png">
 <meta property="og:image" content="https://chriskery.github.io/2023/11/29/%E5%AE%B9%E5%99%A8%E7%BD%91%E7%BB%9C%E6%A8%A1%E5%9E%8B/%E7%BD%91%E7%BB%9C%E5%88%A0%E9%99%A4%E6%B5%81%E7%A8%8B.png">
 <meta property="article:published_time" content="2023-11-29T15:09:46.000Z">
-<meta property="article:modified_time" content="2023-11-30T13:22:07.189Z">
+<meta property="article:modified_time" content="2023-11-30T14:19:19.016Z">
 <meta property="article:author" content="Chris Kery">
 <meta property="article:tag" content="container">
 <meta property="article:tag" content="virtual network">
@@ -334,10 +334,6 @@
 <p>上面己经把网络配置目录中的所有网络配置加载到了 networks 典中， 然后通过遍历这个字典来展示创建的网络，如下：</p>
 <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">ListNetwork</span><span class="hljs-params">()</span></span> &#123;<br>	<span class="hljs-comment">// 通过tabwriter库把信息打印到屏幕上</span><br>	w := tabwriter.NewWriter(os.Stdout, <span class="hljs-number">12</span>, <span class="hljs-number">1</span>, <span class="hljs-number">3</span>, <span class="hljs-string">&#x27; &#x27;</span>, <span class="hljs-number">0</span>)<br>	fmt.Fprint(w, <span class="hljs-string">&quot;NAME\tIpRange\tDriver\n&quot;</span>)<br>	<span class="hljs-keyword">for</span> _, nw := <span class="hljs-keyword">range</span> networks &#123;<br>		fmt.Fprintf(w, <span class="hljs-string">&quot;%s\t%s\t%s\n&quot;</span>,<br>			nw.Name,<br>			nw.IPRange.String(),<br>			nw.Driver,<br>		)<br>	&#125;<br>	<span class="hljs-keyword">if</span> err := w.Flush(); err != <span class="hljs-literal">nil</span> &#123;<br>		logrus.Errorf(<span class="hljs-string">&quot;Flush error %v&quot;</span>, err)<br>		<span class="hljs-keyword">return</span><br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
 
-
-
-
-
 <h3 id="删除网络"><a href="#删除网络" class="headerlink" title="删除网络"></a>删除网络</h3><p>通过使用命令 <code>mydocker network remove</code>命令删除己经创建的网络。</p>
 <p>具体流程如下图：</p>
 <p><img src="https://github.com/lixd/daily-notes/blob/master/Golang/mydocker/assets/%E7%BD%91%E7%BB%9C%E5%88%A0%E9%99%A4%E6%B5%81%E7%A8%8B.png" srcset="/img/loading.gif" lazyload></p>
@@ -361,6 +357,27 @@
             <hr/>
             <div>
               <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/container/" class="category-chain-item">container</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
   
   
     <div class="post-meta">
