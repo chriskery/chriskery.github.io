@@ -24,7 +24,7 @@
 <meta property="og:description" content="背景分布式应用通常会创建多个service的副本以提高service的可靠性和可伸缩性，但通常有必要指定一个副本负责所有副本之间的协调，kubernetes的SIG已经提供了这方面的能力，主要是通过configmap&#x2F;lease&#x2F;endpoint的资源实现选Leader的功能。通常在Leader Election的选举过程中，会有一组确定的candidates（候选人）都竞相宣">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2023-12-02T15:35:14.000Z">
-<meta property="article:modified_time" content="2023-12-02T17:08:12.729Z">
+<meta property="article:modified_time" content="2023-12-02T17:11:03.561Z">
 <meta property="article:author" content="Chris Kery">
 <meta name="twitter:card" content="summary_large_image">
   
@@ -221,7 +221,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          7.7k 字
+          7.8k 字
         
       </span>
     
@@ -306,9 +306,9 @@
 <ul>
 <li>获取ElectionRecord对象。<ul>
 <li>若ElectionRecord对象不存在，则创建新的ElectionRecord对象，创建成功后宣称成为Leader。</li>
-<li>若ElectionRecord对象存在，则将获取的oldLeaderElectionRecord更新到该le的observedRecord缓存中。<ul>
+<li>若ElectionRecord对象存在，则将获取的oldLeaderElectionRecord更新到该le(LeaderElector)的observedRecord缓存中。<ul>
 <li>若observedRecord不是该le创建且未过期，获取锁失败，退出。</li>
-<li>否则则调用<code> le.config.Lock.Update(leaderElectionRecord)</code>使用该le的信息尝试更新 ElectionRecord对象，更新成功后宣称成为Leader。</li>
+<li>否则调用<code> le.config.Lock.Update(leaderElectionRecord)</code>使用该le(LeaderElector)的信息尝试更新 ElectionRecord对象，更新成功后宣称成为Leader。</li>
 </ul>
 </li>
 </ul>
@@ -320,7 +320,7 @@
 <li>获取到锁记录和缓存的不同，说明上次尝试获取锁到现在的间隔内 leader 变化了，更新缓存；</li>
 <li>leader 超期没续期且当前节点抢锁成功，更新缓存。</li>
 </ul>
-<p>如果锁对象不存在或者leader在任期时间内未更新锁对象，则该le会执行抢锁的逻辑，尝试成为新的leader。<br>。</p>
+<p>如果锁对象不存在或者leader在任期时间内未更新锁对象，则该le会执行抢锁的逻辑，尝试成为新的leader。</p>
 <h2 id="Leader续期"><a href="#Leader续期" class="headerlink" title="Leader续期"></a>Leader续期</h2><p>在获取到锁成为 leader 后，会进入 le.renew(ctx) 方法进行定期续期操作。其实现如下：</p>
 <figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(le *LeaderElector)</span></span> renew(ctx context.Context) &#123;<br>	ctx, cancel := context.WithCancel(ctx)<br>	<span class="hljs-keyword">defer</span> cancel()<br>	<span class="hljs-comment">// 定期续期，每 RetryPeriod 执行一次续期</span><br>	wait.Until(<span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, le.config.RenewDeadline)<br>		<span class="hljs-keyword">defer</span> timeoutCancel()<br>		<span class="hljs-comment">// 执行续期，直到成功或超时</span><br>		err := wait.PollImmediateUntil(le.config.RetryPeriod, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> (<span class="hljs-type">bool</span>, <span class="hljs-type">error</span>) &#123;<br>			<span class="hljs-keyword">return</span> le.tryAcquireOrRenew(timeoutCtx), <span class="hljs-literal">nil</span><br>		&#125;, timeoutCtx.Done())<br><br>		le.maybeReportTransition()<br>		desc := le.config.Lock.Describe()<br>		<span class="hljs-comment">// 若renew成功，则Until会不断循环</span><br>		<span class="hljs-keyword">if</span> err == <span class="hljs-literal">nil</span> &#123;<br>			klog.V(<span class="hljs-number">5</span>).Infof(<span class="hljs-string">&quot;successfully renewed lease %v&quot;</span>, desc)<br>			<span class="hljs-keyword">return</span><br>		&#125;<br>		<span class="hljs-comment">// 若renew失败，引发超时错误，说明续期失败，退出续期流程</span><br>		le.config.Lock.RecordEvent(<span class="hljs-string">&quot;stopped leading&quot;</span>)<br>		le.metrics.leaderOff(le.config.Name)<br>		klog.Infof(<span class="hljs-string">&quot;failed to renew lease %v: %v&quot;</span>, desc, err)<br>		cancel()<br>	&#125;, le.config.RetryPeriod, ctx.Done())<br><br>	<span class="hljs-comment">// if we hold the lease, give it up</span><br>	<span class="hljs-keyword">if</span> le.config.ReleaseOnCancel &#123;<br>		le.release()<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
 <p>renew 方法如果在任期内续期失败则会退出续期循环，主流程结束，其它candidate会尝试成为新的leader。旧的leader若想重新参与竞选，则需要再次调用<code>leaderelection.RunOrDie</code>, Kubernetes的组件一般直接退出，通过重启Pod实现重新参与选举。</p>

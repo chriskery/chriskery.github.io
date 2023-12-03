@@ -16,17 +16,22 @@
   <meta name="author" content="Chris Kery">
   <meta name="keywords" content="">
   
-    <meta name="description" content="https:&#x2F;&#x2F;github.com&#x2F;chriskery">
+    <meta name="description" content="背景Kubernetes提供了默认的kube scheduler调度器将未调度的 Pod 按照调度策略绑定到合适的 Node，其调度的流程如下图所示：kube scheduler调度主要分为以下几个部分：  预选过程:过滤掉不满足条件的节点，这个过程称为Predicates 优选过程:对通过的节点按照优先级排序，称之为Priorities  最后从中选择优先级最高的节点，将Pod调度到此节点上。">
 <meta property="og:type" content="article">
 <meta property="og:title" content="kube-batch详解">
 <meta property="og:url" content="https://chriskery.github.io/2023/12/03/kube-batch%E8%AF%A6%E8%A7%A3/index.html">
 <meta property="og:site_name" content="Chriskery&#39;s Blog">
-<meta property="og:description" content="https:&#x2F;&#x2F;github.com&#x2F;chriskery">
+<meta property="og:description" content="背景Kubernetes提供了默认的kube scheduler调度器将未调度的 Pod 按照调度策略绑定到合适的 Node，其调度的流程如下图所示：kube scheduler调度主要分为以下几个部分：  预选过程:过滤掉不满足条件的节点，这个过程称为Predicates 优选过程:对通过的节点按照优先级排序，称之为Priorities  最后从中选择优先级最高的节点，将Pod调度到此节点上。">
 <meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://raw.githubusercontent.com/kubernetes/enhancements/master/keps/sig-scheduling/624-scheduling-framework/scheduling-framework-extensions.png">
+<meta property="og:image" content="https://pic3.zhimg.com/80/v2-057fae99cb1a1a620b98bb4b96f0127e_1440w.webp">
 <meta property="article:published_time" content="2023-12-02T17:17:01.000Z">
-<meta property="article:modified_time" content="2023-12-02T17:17:01.035Z">
+<meta property="article:modified_time" content="2023-12-03T14:42:14.029Z">
 <meta property="article:author" content="Chris Kery">
+<meta property="article:tag" content="kubernetes">
+<meta property="article:tag" content="kube-batch">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/kubernetes/enhancements/master/keps/sig-scheduling/624-scheduling-framework/scheduling-framework-extensions.png">
   
   
     <meta name="referrer" content="no-referrer-when-downgrade">
@@ -221,7 +226,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          0 字
+          6.1k 字
         
       </span>
     
@@ -232,7 +237,7 @@
         
         
         
-          1 分钟
+          51 分钟
         
       </span>
     
@@ -274,7 +279,60 @@
             
               <div class="markdown-body">
                 
-                
+                <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p>Kubernetes提供了默认的kube scheduler调度器将未调度的 Pod 按照调度策略绑定到合适的 Node，其调度的流程如下图所示：<br><img src="https://raw.githubusercontent.com/kubernetes/enhancements/master/keps/sig-scheduling/624-scheduling-framework/scheduling-framework-extensions.png" srcset="/img/loading.gif" lazyload alt="kube scheduler调度流程"><br>kube scheduler调度主要分为以下几个部分：</p>
+<ul>
+<li>预选过程:过滤掉不满足条件的节点，这个过程称为Predicates</li>
+<li>优选过程:对通过的节点按照优先级排序，称之为Priorities</li>
+</ul>
+<p>最后从中选择优先级最高的节点，将Pod调度到此节点上。</p>
+<p>从上面的调度流程可以看到，Kube Scheduler 是基于单个Pod的调度，Kube Scheduler的调度目标是给单个Pod找到最优的节点，这个特性对于需要涉及到多个Pod的作业来说（分布式AI训练&#x2F;大数据）是不够友好的。以AI为例，分布式训练需要所有 worker 都启动后，训练才能够开始进行。使用原生调度器，可能会出现以下问题：</p>
+<ul>
+<li>一个任务包含 10 个 worker, 但是集群剩余资源只满足 9 个 worker。原生调度器会将任务的 9 个 worker 调度并启动，而最后一个 worker 一直无法启动。这样训练一直无法开始，9 个已经启动的 worker 资源就会被浪费。</li>
+<li>两个任务，各包含 10 个 worker, 集群资源只能启动 10 个 worker。两个任务分别有 5 个 worker 被启动，但两个任务都无法开始训练。10 个 worker 的资源被浪费了。</li>
+</ul>
+<p>Kubernetes社区提供了<a target="_blank" rel="noopener" href="https://github.com/kubernetes-retired/kube-batch/edit/master/doc/usage/tutorial.md">kube batch</a>调度器，帮助 Kubernetes弥补在“高性能计算”方面的不足，帮助Kubernetes构建统一的容器平台。</p>
+<h2 id="架构"><a href="#架构" class="headerlink" title="架构"></a>架构</h2><p><img src="https://pic3.zhimg.com/80/v2-057fae99cb1a1a620b98bb4b96f0127e_1440w.webp" srcset="/img/loading.gif" lazyload alt="kube batch架构"></p>
+<p>可以看到kube batch提供的两个核心能力为：</p>
+<ul>
+<li>提供一个资源调度的中间层,为计算类作业提供了相应的调度算法支持</li>
+<li>多租户之间的隔离</li>
+</ul>
+<p>Kube Batch 内部包含如下几个模块：</p>
+<ul>
+<li>Cache，缓存 Kubernetes 集群内的 Node、Pod、PodGroup、Queue 等资源对象信息。</li>
+<li>Session，该模块用于管理 Kube Batch 的调度过程，每次调度称为一次 Session 过程。</li>
+<li>Action，一次调度包括多个 Action 操作，Action根据配置的Plugins内容将作业调度到具体的节点上。</li>
+<li>Plugin，用于实现不同调度策略，例如 DRF、Gang Scheduling。</li>
+</ul>
+<p>当前kube batch支持的actions和plugins包括：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs gonlang">actions: &quot;allocate, backfill&quot;<br>tiers:<br>- plugins:<br>  - name: priority<br>  - name: gang<br>- plugins:<br>  - name: drf<br>  - name: predicates<br>  - name: proportion<br>  - name: nodeorder<br></code></pre></td></tr></table></figure>
+
+<p>Kube Batch默认启动的配置包括allocate和backfill两个action，</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-keyword">var</span> defaultSchedulerConf = <span class="hljs-string">`</span><br><span class="hljs-string">actions: &quot;allocate, backfill&quot;</span><br><span class="hljs-string">tiers:</span><br><span class="hljs-string">- plugins:</span><br><span class="hljs-string">  - name: priority</span><br><span class="hljs-string">  - name: gang</span><br><span class="hljs-string">- plugins:</span><br><span class="hljs-string">  - name: drf</span><br><span class="hljs-string">  - name: predicates</span><br><span class="hljs-string">  - name: proportion</span><br><span class="hljs-string">  - name: nodeorder`</span><br></code></pre></td></tr></table></figure>
+<h2 id="具体实现"><a href="#具体实现" class="headerlink" title="具体实现"></a>具体实现</h2><figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br>	......<br>	<span class="hljs-keyword">if</span> err := app.Run(s); err != <span class="hljs-literal">nil</span> &#123;<br>		fmt.Fprintf(os.Stderr, <span class="hljs-string">&quot;%v\n&quot;</span>, err)<br>		os.Exit(<span class="hljs-number">1</span>)<br>	&#125;<br>&#125;<br><br><span class="hljs-comment">// Run the kubeBatch scheduler</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">Run</span><span class="hljs-params">(opt *options.ServerOption)</span></span> <span class="hljs-type">error</span> &#123;<br>	<span class="hljs-comment">// Start policy controller to allocate resources.</span><br>	sched, err := scheduler.NewScheduler(config,<br>		opt.SchedulerName,<br>		opt.SchedulerConf,<br>		opt.SchedulePeriod,<br>		opt.DefaultQueue)<br>	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-built_in">panic</span>(err)<br>	&#125;<br><br>	run := <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(ctx context.Context)</span></span> &#123;<br>		sched.Run(ctx.Done())<br>		&lt;-ctx.Done()<br>	&#125;<br><br>	<span class="hljs-keyword">if</span> !opt.EnableLeaderElection &#123;<br>		run(context.TODO())<br>		<span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">&quot;finished without leader elect&quot;</span>)<br>	&#125;<br><br>	leaderelection.RunOrDie(context.TODO(), leaderelection.LeaderElectionConfig&#123;<br>		Lock:          rl,<br>		LeaseDuration: leaseDuration,<br>		RenewDeadline: renewDeadline,<br>		RetryPeriod:   retryPeriod,<br>		Callbacks: leaderelection.LeaderCallbacks&#123;<br>			OnStartedLeading: run,<br>			OnStoppedLeading: <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>				glog.Fatalf(<span class="hljs-string">&quot;leaderelection lost&quot;</span>)<br>			&#125;,<br>		&#125;,<br>	&#125;)<br>	<span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">&quot;lost lease&quot;</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>kube batch的<a target="_blank" rel="noopener" href="https://github.com/kubernetes-retired/kube-batch/blob/1ebe60e4af4f164cab0818bc1530e541ed7aa1a5/cmd/kube-batch/app/server.go">启动流程</a>：</p>
+<ol>
+<li>判断是否需要进行leader election，若不需要，调用sched.Run(ctx.Done())启动调度</li>
+<li>若需要，先进行leader election，leader再调用sched.Run(ctx.Done())启动调度</li>
+</ol>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(pc *Scheduler)</span></span> Run(stopCh &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;) &#123;<br>     <span class="hljs-comment">// Start cache for policy.</span><br>    <span class="hljs-keyword">go</span> pc.cache.Run(stopCh)<br>    ......<br>    pc.actions, pc.pluginArgs = loadSchedulerConf(conf)<br><br>    <span class="hljs-keyword">go</span> wait.Until(pc.runOnce, <span class="hljs-number">1</span>*time.Second, stopCh)<br>&#125;<br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(pc *Scheduler)</span></span> runOnce() &#123;<br>    ssn := framework.OpenSession(pc.cache, pc.pluginArgs)<br>    <span class="hljs-keyword">defer</span> framework.CloseSession(ssn)<br><br>    <span class="hljs-keyword">for</span> _, action := <span class="hljs-keyword">range</span> pc.actions &#123;<br>        action.Execute(ssn)<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>sched的调度过程如上：</p>
+<ol>
+<li>调用cache模块，通过Informer同步集群内Pod&#x2F;Node等相关信息。</li>
+<li>加载配置文件</li>
+<li>每隔<code>1*time.Second</code>调用一次<code>sched.runOnce()</code>，执行调度</li>
+<li><code>runOnce</code>依次执行OpenSession-&gt;action.Execute(ssn)-&gt;CloseSession()</li>
+</ol>
+<h3 id="cache"><a href="#cache" class="headerlink" title="cache"></a>cache</h3><p>cache的具体实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-comment">// Run  starts the schedulerCache</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(sc *SchedulerCache)</span></span> Run(stopCh &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;) &#123;<br>	<span class="hljs-keyword">go</span> sc.pdbInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.podInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.nodeInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.podGroupInformerv1alpha1.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.podGroupInformerv1alpha2.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.pvInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.pvcInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.scInformer.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.queueInformerv1alpha1.Informer().Run(stopCh)<br>	<span class="hljs-keyword">go</span> sc.queueInformerv1alpha2.Informer().Run(stopCh)<br><br>	<span class="hljs-keyword">if</span> options.ServerOpts.EnablePriorityClass &#123;<br>		<span class="hljs-keyword">go</span> sc.pcInformer.Informer().Run(stopCh)<br>	&#125;<br><br>	<span class="hljs-comment">// Re-sync error tasks.</span><br>	<span class="hljs-keyword">go</span> wait.Until(sc.processResyncTask, <span class="hljs-number">0</span>, stopCh)<br><br>	<span class="hljs-comment">// Cleanup jobs.</span><br>	<span class="hljs-keyword">go</span> wait.Until(sc.processCleanupJob, <span class="hljs-number">0</span>, stopCh)<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>除了缓存pod&#x2F;Node&#x2F;PV&#x2F;PVC等相关信息外，kube batch还定义了一系列的CRDs，以实现批量调度和多租户之间的隔离。</p>
+<h3 id="session"><a href="#session" class="headerlink" title="session"></a>session</h3><figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-comment">// OpenSession start the session</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">OpenSession</span><span class="hljs-params">(cache cache.Cache, tiers []conf.Tier)</span></span> *Session &#123;<br>	ssn := openSession(cache)<br>	<br>	<span class="hljs-keyword">for</span> _, plugin := <span class="hljs-keyword">range</span> ssn.plugins &#123;<br>		plugin.OnSessionOpen(ssn)<br>	&#125;<br>	<span class="hljs-keyword">return</span> ssn<br>&#125;<br><br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">openSession</span><span class="hljs-params">(cache cache.Cache)</span></span> *Session &#123;<br>	ssn := &amp;Session&#123;<br>		UID:   uuid.NewUUID(),<br>		cache: cache<br>	&#125;<br><br>	snapshot := cache.Snapshot()<br><br>	ssn.Jobs = snapshot.Jobs<br>	ssn.Nodes = snapshot.Nodes<br>	ssn.Queues = snapshot.Queues<br>	<span class="hljs-keyword">return</span> ssn<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>OpenSession首先调用了<code>openSession(cache cache.Cache)</code>获取到本次调度的session，<code>openSession(cache cache.Cache)</code>内部对当前缓存的cache进行了快照，并将快照里的信息保存在了session中。然后调用注册的plugins的<code>OnSessionOpen</code>方法通知新一轮的调度开始。</p>
+<h3 id="action"><a href="#action" class="headerlink" title="action"></a>action</h3><p>以allocate为例，其实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(alloc *allocateAction)</span></span> Execute(ssn *framework.Session) &#123;<br>	queues := util.NewPriorityQueue(ssn.QueueOrderFn)<br>	<span class="hljs-keyword">for</span> _, job := <span class="hljs-keyword">range</span> ssn.Jobs &#123;<br>		<span class="hljs-keyword">if</span> queue, found := ssn.Queues[job.Queue]; found &#123;<br>			queues.Push(queue)<br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			glog.Warningf(<span class="hljs-string">&quot;Skip adding Job &lt;%s/%s&gt; because its queue %s is not found&quot;</span>,<br>				job.Namespace, job.Name, job.Queue)<br>			<span class="hljs-keyword">continue</span><br>		&#125;<br><br>	&#125;<br><br>	<span class="hljs-keyword">for</span> &#123;<br>		<span class="hljs-keyword">if</span> queues.Empty() &#123;<br>			<span class="hljs-keyword">break</span><br>		&#125;<br><br>		queue := queues.Pop().(*api.QueueInfo)<br><br>		jobs, found := jobsMap[queue.UID]<br><br>		job := jobs.Pop().(*api.JobInfo)<br>		<br>		tasks := pendingTasks[job.UID]<br><br>		<span class="hljs-keyword">for</span> !tasks.Empty() &#123;<br>			task := tasks.Pop().(*api.TaskInfo)<br>			predicateNodes := util.PredicateNodes(task, allNodes, predicateFn)<br>			<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(predicateNodes) == <span class="hljs-number">0</span> &#123;<br>				<span class="hljs-comment">// Further Tasks should be checked because tasks are ordered in priority, so it affects taskPriority within Job,</span><br>				<span class="hljs-comment">// so if one task fails predicates, it should not check further tasks in same job, should skip to next job.</span><br>				<span class="hljs-keyword">break</span><br>			&#125;<br>			priorityList, err := util.PrioritizeNodes(task, predicateNodes, ssn.NodePrioritizers())<br>			<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>				glog.Errorf(<span class="hljs-string">&quot;Prioritize Nodes for task %s err: %v&quot;</span>, task.UID, err)<br>				<span class="hljs-keyword">break</span><br>			&#125;<br>			nodeName := util.SelectBestNode(priorityList)<br>            ......<br>		&#125;<br>		<span class="hljs-comment">// Added Queue back until no job in Queue.</span><br>		queues.Push(queue)<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>可以看出，在单个Session中，Job首先按照Queue进行聚合，然后依次遍历每条队列里的每个Job，将这个Job内部的Task依次执行调度。调度过程也跟默认的Kube Scheduler调度器差不多:<code>PredicateNodes-&gt;PrioritizeNodes-&gt;SelectBestNode</code>。在调用Action之前，OpenSession为配置的Plugins注册了一系列Func，在执行不同Action的时候，使用这些Func对Task进行调度。</p>
+
                 
               </div>
             
@@ -282,6 +340,36 @@
             <div>
               <div class="post-metas my-3">
   
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/kubernetes/" class="category-chain-item">kubernetes</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/kubernetes/" class="print-no-link">#kubernetes</a>
+      
+        <a href="/tags/kube-batch/" class="print-no-link">#kube-batch</a>
+      
+    </div>
   
 </div>
 
