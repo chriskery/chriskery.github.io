@@ -129,7 +129,7 @@ func (le *LeaderElector) acquire(ctx context.Context) bool {
 
 ### 抢锁
 candidate抢锁关键的实现在于tryAcquireOrRenew，而tryAcquireOrRenew就是依赖锁的状态转移机制完成核心逻辑。其实现为：
-```gonlang
+```golang
 func (le *LeaderElector) tryAcquireOrRenew(ctx context.Context) bool {
   now := metav1.Now()
   leaderElectionRecord := rl.LeaderElectionRecord{
