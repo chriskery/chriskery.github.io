@@ -24,7 +24,7 @@
 <meta property="og:description" content="简介pflag是一个Go标准flag包的开箱即用的代替，实现了POSIX&#x2F;GNU风格的flags。pflag的作用是帮助开发者定义命令行参数选项，命令行参数选项在实际开发中很常用，特别是在写工具的时候。 pflag的使用非常广泛，近些年大火的Kubernetes的大量组件的都是用的pflag代替Go原有的flag包。例如Kubelet： 1234567&#x2F;&#x2F; NewKubeletCommand cr">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2023-12-06T13:49:50.000Z">
-<meta property="article:modified_time" content="2023-12-06T14:18:28.566Z">
+<meta property="article:modified_time" content="2023-12-06T14:19:52.196Z">
 <meta property="article:author" content="Chris Kery">
 <meta property="article:tag" content="golang">
 <meta property="article:tag" content="pflag">
@@ -234,7 +234,7 @@
         
         
         
-          25 分钟
+          26 分钟
         
       </span>
     
@@ -301,6 +301,8 @@
 <p>-A 会被正常解析为1，-B则不会被解析，<code>--</code>之后的剩余参数会被保存在flag中，可以通过Args&#x2F;NArg&#x2F;Arg等方法访问。</p>
 <h3 id="标准化选项的名称"><a href="#标准化选项的名称" class="headerlink" title="标准化选项的名称"></a>标准化选项的名称</h3><p><code>pflag</code>提供了<code>NormalizeFunc</code>可以实现标准化选项的功能。例如我们定义了一个flag为my-flag，用户在使用的时候写成了–my_flag&#x3D;3，我们希望这也能够正常工作，就通过 pflag 提供的 SetNormalizeFunc 功能轻松的解决这个问题。</p>
 <figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">wordSepNormalizeFunc</span><span class="hljs-params">(f *flag.FlagSet, name <span class="hljs-type">string</span>)</span></span> flag.NormalizedName &#123;<br>    from := []<span class="hljs-type">string</span>&#123;<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-string">&quot;_&quot;</span>&#125;<br>    to := <span class="hljs-string">&quot;.&quot;</span><br>    <span class="hljs-keyword">for</span> _, sep := <span class="hljs-keyword">range</span> from &#123;<br>        name = strings.Replace(name, sep, to, <span class="hljs-number">-1</span>)<br>    &#125;<br>    <span class="hljs-keyword">return</span> flag.NormalizedName(name)<br>&#125;<br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br>    <span class="hljs-comment">// 设置标准化参数名称的函数</span><br>    flag.CommandLine.SetNormalizeFunc(wordSepNormalizeFunc)<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="FlagSet"><a href="#FlagSet" class="headerlink" title="FlagSet"></a>FlagSet</h2><p><code>FlagSet</code>类型允许定义独立的标志集，例如在命令行界面中实现子命令。FlagSet的方法类似于命令行标志集的顶级函数。</p>
 
                 
               </div>
@@ -392,6 +394,12 @@
                 <div class="post-prevnext my-3">
                   <article class="post-prev col-6">
                     
+                    
+                      <a href="/2023/12/11/kubernetes-Informer%E8%AF%A6%E8%A7%A3/" title="kubernetes-Informer详解">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">kubernetes-Informer详解</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
                     
                   </article>
                   <article class="post-next col-6">
