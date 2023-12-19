@@ -14,8 +14,10 @@ Informer 由三部分构成：
 
 - Reflector：Informer 通过 Reflector 与 Kubernetes apiserver 建立连接并 ListAndWatch Kubernetes 资源对象的变化，并将此“增量” push 入 DeltaFIFO Queue
 - DeltaFIFO Queue：Informer 从该队列中 pop 增量，或创建或更新或删除本地缓存（Local Store）
-- Indexer：将增量中的 Kubernetes 资源对象保存到本地缓存中，并为其创建索引，这份缓存与 etcd 中的数据是完全一致的。控制器只从本地缓存通过索引读取数据，这样做减小了 apiserver 和 etcd 的压力
-![](![Alt text](image.png))
+- Indexer：将增量中的 Kubernetes 资源对象保存到本地缓存中，并为其创建索引，这份缓存与 etcd 中的数据是完全一致的。控制器只从本地缓存通过索引读取数据，这样做减小了 apiserver 和 etcd 的压力。
+
+![](https://pic.crazytaxii.com/21-03-31/22701732.jpg)
+
 ## Informer使用
 informer的使用分为以下几步：
 1. 引入相关依赖
@@ -65,9 +67,8 @@ if !cache.WaitForCacheSync(stopCh, podInformer.Informer().HasSynced) {
 ```
 
 ## 源码实现
-informerFactory通过调用`informerFactory.Start(stopCh)`初始化所有请求的informer，其内部的实现为：
+在上面的代码示例种我们创建了一个`informerFactory`对象并通过调用`informerFactory.Start(stopCh)`初始化所有请求的informer，其内部的实现为：
 ```golang
-
 func (f *sharedInformerFactory) Start(stopCh <-chan struct{}) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -374,73 +375,181 @@ loop:
 		},
 	)`里的`c.config.Queue`，对应上面informer流程图中的第2步——`AddObject`.
 
-`Informer`的[接口定义](https://github.com/kubernetes/client-go/blob/v0.18.6/tools/cache/shared_informer.go#L168-L174)如下所示：
+接下来我们看下`w, err = r.listerWatcher.Watch(options)`的listerWatcher是怎么来的。在初始化`Reflector`的时候我们通过`c.config.ListerWatcher`对`r.listerWatcher`进行了初始化，那`c.config.ListerWatcher`又是怎么来的呢？通过上面分析的`func (s *sharedIndexInformer) Run()`函数，我们知道`c.config.ListerWatcher`来自于sharedIndexInformer的`listerWatcher`。在我们的示例代码中，我们使用了`podInformer.Informer()`生成了一个pod的informer对象，其具体实现为：
 ```golang
-// SharedIndexInformer provides add and get Indexers ability based on SharedInformer.
-type SharedIndexInformer interface {
-    SharedInformer
-    // AddIndexers add indexers to the informer before it starts.
-    AddIndexers(indexers Indexers) error
-    GetIndexer() Indexer
+func (f *podInformer) Informer() cache.SharedIndexInformer {
+	return f.factory.InformerFor(&corev1.Pod{}, f.defaultInformer)
 }
 
-type SharedInformer interface {
-	// AddEventHandler adds an event handler to the shared informer using the shared informer's resync
-	// period.  Events to a single handler are delivered sequentially, but there is no coordination
-	// between different handlers.
-	AddEventHandler(handler ResourceEventHandler)
-	// AddEventHandlerWithResyncPeriod adds an event handler to the
-	// shared informer using the specified resync period.  The resync
-	// operation consists of delivering to the handler a create
-	// notification for every object in the informer's local cache; it
-	// does not add any interactions with the authoritative storage.
-	AddEventHandlerWithResyncPeriod(handler ResourceEventHandler, resyncPeriod time.Duration)
-	// GetStore returns the informer's local cache as a Store.
-	GetStore() Store
-	// GetController gives back a synthetic interface that "votes" to start the informer
-	GetController() Controller
-	// Run starts and runs the shared informer, returning after it stops.
-	// The informer will be stopped when stopCh is closed.
-	Run(stopCh <-chan struct{})
-	// HasSynced returns true if the shared informer's store has been
-	// informed by at least one full LIST of the authoritative state
-	// of the informer's object collection.  This is unrelated to "resync".
-	HasSynced() bool
-	// LastSyncResourceVersion is the resource version observed when last synced with the underlying
-	// store. The value returned is not synchronized with access to the underlying store and is not
-	// thread-safe.
-	LastSyncResourceVersion() string
+func (f *podInformer) defaultInformer(client kubernetes.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+	return NewFilteredPodInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+}
+// NewFilteredPodInformer constructs a new informer for Pod type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewFilteredPodInformer(client kubernetes.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
+	return cache.NewSharedIndexInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.CoreV1().Pods(namespace).List(context.TODO(), options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.CoreV1().Pods(namespace).Watch(context.TODO(), options)
+			},
+		},
+		&corev1.Pod{},
+		resyncPeriod,
+		indexers,
+	)
+}
+
+```
+通过k8s的代码的代码生成工具生成的相关代码中，都会有NewFilteredXXXInformer 函数，其中调用了 `NewSharedIndexInformer`，`ListWatch` 对象就是在这里初始化的。
+
+具体的List&Watch的流程为：
+1. 首先 r.listerWatcher.List 获取所有资源数据`list`。本质上是调用 Kubernetes API 资源 NewFilteredPodInformer 时初始化 ListWatch 时传入的 ListFunc 函数，通过 ClientSet 客户端与 apiserver 交互并获取 Pod资源列表数据。
+2. 调用resourceVersion = listMetaInterface.GetResourceVersion()
+获取资源版本号。k8s内的每种资源都有资源版本号。注意，pod和pods是两种资源。当 Kubernetes 资源对象变化时，其资源版本也会发生变化
+3. 调用meta.ExtractList 将资源数据`list`转换为资源对象列表`items`。这里就是做一些类型转换。类似于将pods 资源对象转化为pod数组。
+4. 调用r.syncWith 将资源对象和资源版本号存储到 DeltaFIFO 队列中。这里是直接调用的`r.store.Replace(found, resourceVersion)`。
+5. 调用`r.setLastSyncResourceVersion(resourceVersion)`设置当前的资源版本号。
+
+至此，已经完成了资源对象的List操作，接下来进行资源对象的Watch操作。这里我们之前看到过，就是调用`r.watch()`，内部又调用`w, err = r.listerWatcher.Watch(options)`返回了了一个实现了watch接口的对象`w`，最终会调用到我们通过`NewFilteredPodInformer`生成的`WatchFunc`函数回调。
+
+来看下`client.CoreV1().Pods(namespace).Watch`的函数实现：
+```golang
+// Watch returns a watch.Interface that watches the requested pods.
+func (c *pods) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+    var timeout time.Duration
+    if opts.TimeoutSeconds != nil {
+        timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
+    }
+    opts.Watch = true
+    return c.client.Get().
+        Namespace(c.ns).
+        Resource("pods").
+        VersionedParams(&opts, scheme.ParameterCodec).
+        Timeout(timeout).
+        Watch(ctx)
+}
+```
+再来看下 `c.client.Get().
+        Namespace(c.ns).
+        Resource("pods").
+        VersionedParams(&opts, scheme.ParameterCodec).
+        Timeout(timeout).
+        Watch(ctx)` 的实现:
+```golang
+// Watch attempts to begin watching the requested location.
+// Returns a watch.Interface, or an error.
+func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
+
+    url := r.URL().String()
+    req, err := http.NewRequest(r.verb, url, r.body)
+    if err != nil {
+        return nil, err
+    }
+    req = req.WithContext(ctx)
+    req.Header = r.headers
+    client := r.c.Client
+    if client == nil {
+        client = http.DefaultClient
+    }
+    r.backoff.Sleep(r.backoff.CalculateBackoff(r.URL()))
+    resp, err := client.Do(req)
+    // a lot of code here
+    if resp.StatusCode != http.StatusOK {
+        defer resp.Body.Close()
+        if result := r.transformResponse(resp, req); result.err != nil {
+            return nil, result.err
+        }
+        return nil, fmt.Errorf("for request %s, got status: %v", url, resp.StatusCode)
+    }
+
+    contentType := resp.Header.Get("Content-Type")
+    mediaType, params, err := mime.ParseMediaType(contentType)
+    if err != nil {
+        klog.V(4).Infof("Unexpected content type from the server: %q: %v", contentType, err)
+    }
+    objectDecoder, streamingSerializer, framer, err := r.c.content.Negotiator.StreamDecoder(mediaType, params)
+    if err != nil {
+        return nil, err
+    }
+
+    frameReader := framer.NewFrameReader(resp.Body)
+    watchEventDecoder := streaming.NewDecoder(frameReader, streamingSerializer)
+
+    return watch.NewStreamWatcher(
+        restclientwatch.NewDecoder(watchEventDecoder, objectDecoder),
+        // use 500 to indicate that the cause of the error is unknown - other error codes
+        // are more specific to HTTP interactions, and set a reason
+        errors.NewClientErrorReporter(http.StatusInternalServerError, r.verb, "ClientWatchDecoding"),
+    ), nil
+}
+
+
+func (r *Request) newStreamWatcher(resp *http.Response) (watch.Interface, error) {
+	contentType := resp.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		klog.V(4).Infof("Unexpected content type from the server: %q: %v", contentType, err)
+	}
+	objectDecoder, streamingSerializer, framer, err := r.c.content.Negotiator.StreamDecoder(mediaType, params)
+	if err != nil {
+		return nil, err
+	}
+
+	handleWarnings(resp.Header, r.warningHandler)
+
+	frameReader := framer.NewFrameReader(resp.Body)
+	watchEventDecoder := streaming.NewDecoder(frameReader, streamingSerializer)
+
+	return watch.NewStreamWatcher(
+		restclientwatch.NewDecoder(watchEventDecoder, objectDecoder),
+		// use 500 to indicate that the cause of the error is unknown - other error codes
+		// are more specific to HTTP interactions, and set a reason
+		errors.NewClientErrorReporter(http.StatusInternalServerError, r.verb, "ClientWatchDecoding"),
+	), nil
 }
 ```
 
-[`sharedIndexInformer`](https://github.com/kubernetes/client-go/blob/v0.18.6/tools/cache/shared_informer.go#L257-L301)实现了`SharedIndexInformer`接口（在Kubernetes中，一般接口的实现类由其对应的接口的首字母小写字母命名。）
+很典型的 Golang HTTP 请求代码，但是 Kubernetes apiserver 首次应答的 HTTP Header 中会携带上 Transfer-Encoding: chunked，表示分块传输，客户端会保持这条 TCP 连接并等待下一个数据块。如此 apiserver 会主动将监听的 Kubernetes 资源对象的变化不断地推送给客户端：
+
+
+```shell
+HTTP/1.1 200 OK
+Content-Type: application/json
+Transfer-Encoding: chunked
+
+{"type":"ADDED", "object":{"kind":"Pod","apiVersion":"v1",...}}
+{"type":"ADDED", "object":{"kind":"Pod","apiVersion":"v1",...}}
+{"type":"MODIFIED", "object":{"kind":"Pod","apiVersion":"v1",...}}
+```
+
+这样，Informer就已经完成了`List&Watch`的过程。每一种资源的informer都会创建一个对应Relector，Relector`List & Watch `某些资源对象，并将其推进对应的DeltaFifo队列里面。
+
+`Relector`进行List & Watch的是在一条单独的go routine中执行中，informer会同时启动一个无限循环的函数，从DeltaFifo中取数据并进行后续的处理:
+
 ```golang
-type sharedIndexInformer struct {
-	indexer    Indexer
-	controller Controller
-
-	processor             *sharedProcessor
-	cacheMutationDetector MutationDetector
-
-	// This block is tracked to handle late initialization of the controller
-	listerWatcher ListerWatcher
-	objectType    runtime.Object
-
-	// resyncCheckPeriod is how often we want the reflector's resync timer to fire so it can call
-	// shouldResync to check if any of our listeners need a resync.
-	resyncCheckPeriod time.Duration
-	// defaultEventHandlerResyncPeriod is the default resync period for any handlers added via
-	// AddEventHandler (i.e. they don't specify one and just want to use the shared informer's default
-	// value).
-	defaultEventHandlerResyncPeriod time.Duration
-	// clock allows for testability
-	clock clock.Clock
-
-	started, stopped bool
-	startedLock      sync.Mutex
-
-	// blockDeltas gives a way to stop all event distribution so that a late event handler
-	// can safely join the shared informer.
-	blockDeltas sync.Mutex
+func (c *controller) processLoop() {
+	for {
+		obj, err := c.config.Queue.Pop(PopProcessFunc(c.config.Process))
+		if err != nil {
+			if err == ErrFIFOClosed {
+				return
+			}
+			if c.config.RetryOnError {
+				// This is the safe way to re-enqueue.
+				c.config.Queue.AddIfNotPresent(obj)
+			}
+		}
+	}
 }
+
 ```
