@@ -7,7 +7,7 @@ categories:
 - Machine Learning
 ---
 ## 目标
-训练神经网络识别衣物
+创建一个简单的深度神经网络（DNN），训练神经网络识别衣物
 ## 数据准备
 我们使用名为 [Fashion MNIST](https://github.com/zalandoresearch/fashion-mnist) 的常见数据集中识别衣物。该数据集包含 70000 种衣物，分为 10 个不同的类别。每件衣物都采用 28x28 的灰度图像。下面是一些示例：
 
@@ -97,3 +97,12 @@ model.evaluate(test_images, test_labels)
 [0.33648381242752073, 0.8789]
 
 该示例返回了 0.8789 的准确率，表示其准确率约为 88%。
+
+
+## 其他
+- 经验法则1: 网络的第一层应与数据形状保持一致。图像的数据是28x28的图像，28 个包含 28 个神经元的层将不可行，因此将 28,28 平化为 784x1 更有意义。
+
+- 经验法则2: 最后一层中的神经元数量应该与您要分类的类的数量相匹配。
+
+- 经验法则3: In a nutshell, normalization reduces the complexity of the problem your network is trying to solve. This can potentially increase the accuracy of your model and speed up the training
+

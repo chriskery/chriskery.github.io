@@ -200,9 +200,62 @@ func openSession(cache cache.Cache) *Session {
 ```
 OpenSession首先调用了`openSession(cache cache.Cache)`获取到本次调度的session，`openSession(cache cache.Cache)`内部对当前缓存的cache进行了快照，并将快照里的信息保存在了session中。然后调用注册的plugins的`OnSessionOpen`方法通知新一轮的调度开始。
 
+plugins在`OnSessionOpen`做的事情主要为注册一系列的函数，以Gang plugin为例，其`OnSessionOpen`的实现为：
+```golang
+func (gp *gangPlugin) OnSessionOpen(ssn *framework.Session) {
+	validJobFn := func(obj interface{}) *api.ValidateResult {
+		....
+		return nil
+	}
+
+	ssn.AddJobValidFn(gp.Name(), validJobFn)
+
+	preemptableFn := func(preemptor *api.TaskInfo, preemptees []*api.TaskInfo) []*api.TaskInfo {
+		...
+		return victims
+	}
+
+	// TODO(k82cn): Support preempt/reclaim batch job.
+	ssn.AddReclaimableFn(gp.Name(), preemptableFn)
+	ssn.AddPreemptableFn(gp.Name(), preemptableFn)
+
+	jobOrderFn := func(l, r interface{}) int {
+		...
+		return 0
+	}
+
+	ssn.AddJobOrderFn(gp.Name(), jobOrderFn)
+	ssn.AddJobReadyFn(gp.Name(), func(obj interface{}) bool {
+		ji := obj.(*api.JobInfo)
+		return ji.Ready()
+	})
+	ssn.AddJobPipelinedFn(gp.Name(), func(obj interface{}) bool {
+		ji := obj.(*api.JobInfo)
+		return ji.Pipelined()
+	})
+}
+```
+
+每个plugin都定义了一系列的回调函数，并且在每次调度周期开始时需要注册到ssn里面。ssn里面定义了很多的map用来存在每个plugin的回调函数，并在调度时依次调用。
+
+```golang
+type Sesssion struct{
+	jobOrderFns      map[string]api.CompareFn
+	queueOrderFns    map[string]api.CompareFn
+	taskOrderFns     map[string]api.CompareFn
+	predicateFns     map[string]api.PredicateFn
+	preemptableFns   map[string]api.EvictableFn
+	reclaimableFns   map[string]api.EvictableFn
+	overusedFns      map[string]api.ValidateFn
+	jobReadyFns      map[string]api.ValidateFn
+	jobPipelinedFns  map[string]api.ValidateFn
+	jobValidFns      map[string]api.ValidateExFn
+	nodePrioritizers map[string][]priorities.PriorityConfig
+}
+```
 ### action
 
-以allocate为例，其实现为：
+以allocate action为例，其实现为：
 ```golang
 func (alloc *allocateAction) Execute(ssn *framework.Session) {
 	queues := util.NewPriorityQueue(ssn.QueueOrderFn)
@@ -251,8 +304,6 @@ func (alloc *allocateAction) Execute(ssn *framework.Session) {
     }
 }
 ```
-可以看出，在单个Session中，Job首先按照Queue进行聚合，然后依次遍历每条队列里的每个Job，将这个Job内部的Task依次执行调度。调度过程也跟默认的Kube Scheduler调度器差不多:`PredicateNodes->PrioritizeNodes->SelectBestNode`。在调用Action之前，OpenSession为配置的Plugins注册了一系列Func，在执行不同Action的时候，使用这些Func对Task进行调度。
+可以看出，在单个Session中，Job首先按照Queue进行聚合，然后依次遍历每条队列里的每个Job，将这个Job内部的Task依次执行调度。调度过程也跟默认的Kube Scheduler调度器差不多:`PredicateNodes->PrioritizeNodes->SelectBestNode`。在调用Action之前，OpenSession为配置的Plugins注册了一系列Func，在执行不同Action的时候，使用这些Func对Node进行选择，并且判断Job是否符合调度条件。
 
-
-
-
+kube-batch问题：在alloca action的在每个周期中，所有的Job按照plugins定义的顺序进行遍历。对于每个Job，都尝试在同一份Node缓存里进行分配。因此，若排在前面的Job占据了资源，但最终Job.Ready()返回false从而在没有实际BINDING对应的Pod到节点上，这部分资源也不会释放。因此很容易出现由于一个不“正确”的Job卡住后续的所有Job的情况。因此一般需要多个action配合使用，避免这种问题。
