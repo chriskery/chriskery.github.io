@@ -37,7 +37,7 @@ Kube Batch 内部包含如下几个模块：
 - Plugin，用于实现不同调度策略，例如 DRF、Gang Scheduling。
 
 当前kube batch支持的actions和plugins包括：
-```gonlang
+```golang
 actions: "allocate, backfill"
 tiers:
 - plugins:
