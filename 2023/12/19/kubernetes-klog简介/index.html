@@ -16,29 +16,25 @@
   <meta name="author" content="Chris Kery">
   <meta name="keywords" content="">
   
-    <meta name="description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
+    <meta name="description" content="背景klog是Kubernetes中用于记录日志的日志库。它旨在为Kubernetes生态系统中的不同组件和服务提供一致和统一的日志记录体验。名称“klog”代表“Kubernetes logger”。  功能简介 klog 支持不同的日志级别，包括 INFO、WARNING、ERROR 、FATAL和 VERBOSE。开发人员可以设置日志级别以根据他们的需求控制日志的详细程度。写入到高严重等级日">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Kubelet详解">
-<meta property="og:url" content="https://chriskery.github.io/2023/11/30/Kubelet%E8%AF%A6%E8%A7%A3/index.html">
+<meta property="og:title" content="kubernetes-klog简介">
+<meta property="og:url" content="https://chriskery.github.io/2023/12/19/kubernetes-klog%E7%AE%80%E4%BB%8B/index.html">
 <meta property="og:site_name" content="Chriskery&#39;s Blog">
-<meta property="og:description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
+<meta property="og:description" content="背景klog是Kubernetes中用于记录日志的日志库。它旨在为Kubernetes生态系统中的不同组件和服务提供一致和统一的日志记录体验。名称“klog”代表“Kubernetes logger”。  功能简介 klog 支持不同的日志级别，包括 INFO、WARNING、ERROR 、FATAL和 VERBOSE。开发人员可以设置日志级别以根据他们的需求控制日志的详细程度。写入到高严重等级日">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
-<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png">
-<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png">
-<meta property="article:published_time" content="2023-11-30T14:37:02.000Z">
-<meta property="article:modified_time" content="2023-12-05T08:12:56.191Z">
+<meta property="article:published_time" content="2023-12-19T14:51:09.000Z">
+<meta property="article:modified_time" content="2023-12-21T15:21:43.054Z">
 <meta property="article:author" content="Chris Kery">
 <meta property="article:tag" content="kubernetes">
-<meta property="article:tag" content="kubelet">
+<meta property="article:tag" content="klog">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
   
   
     <meta name="referrer" content="no-referrer-when-downgrade">
   
   
-  <title>Kubelet详解 - Chriskery&#39;s Blog</title>
+  <title>kubernetes-klog简介 - Chriskery&#39;s Blog</title>
 
   <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
 
@@ -204,7 +200,7 @@
       <div class="banner-text text-center fade-in-up">
         <div class="h2">
           
-            <span id="subtitle" data-typed-text="Kubelet详解"></span>
+            <span id="subtitle" data-typed-text="kubernetes-klog简介"></span>
           
         </div>
 
@@ -215,8 +211,8 @@
     
       <span class="post-meta">
         <i class="iconfont icon-date-fill" aria-hidden="true"></i>
-        <time datetime="2023-11-30 22:37" pubdate>
-          2023年11月30日 晚上
+        <time datetime="2023-12-19 22:51" pubdate>
+          2023年12月19日 晚上
         </time>
       </span>
     
@@ -227,7 +223,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          3.3k 字
+          1.8k 字
         
       </span>
     
@@ -238,7 +234,7 @@
         
         
         
-          28 分钟
+          15 分钟
         
       </span>
     
@@ -275,114 +271,28 @@
       <div class="container nopadding-x-md" id="board-ctn">
         <div id="board">
           <article class="post-content mx-auto">
-            <h1 id="seo-header">Kubelet详解</h1>
+            <h1 id="seo-header">kubernetes-klog简介</h1>
             
             
               <div class="markdown-body">
                 
-                <h2 id="kubelet简介"><a href="#kubelet简介" class="headerlink" title="kubelet简介"></a>kubelet简介</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png" srcset="/img/loading.gif" lazyload alt="Kubernetes 的架构图"></p>
-<p>kubelet 的功能介绍：</p>
-<ul>
-<li>kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 <code>hostname</code>；覆盖 <code>host</code> 的参数；或者云提供商指定的逻辑。</li>
-<li>kubelet 基于 <code>PodSpec</code> 工作。<code>PodSpec</code> 是用 <code>YAML</code> 或者 <code>JSON</code> 对象来描述 Pod。Kubelet 接受通过各种机制（主要是 apiserver）提供的一组 <code>PodSpec</code>，并确保里面描述的容器良好运行。</li>
+                <h2 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h2><p><a target="_blank" rel="noopener" href="https://github.com/kubernetes/klog.git">klog</a>是Kubernetes中用于记录日志的日志库。它旨在为Kubernetes生态系统中的不同组件和服务提供一致和统一的日志记录体验。名称“klog”代表“Kubernetes logger”。 </p>
+<h2 id="功能简介"><a href="#功能简介" class="headerlink" title="功能简介"></a>功能简介</h2><ul>
+<li>klog 支持不同的日志级别，包括 <code>INFO</code>、<code>WARNING</code>、<code>ERROR</code> 、<code>FATAL</code>和 <code>VERBOSE</code>。开发人员可以设置日志级别以根据他们的需求控制日志的详细程度。写入到高严重等级日志文件的消息也会被写入到所有严重等级比它低的日志文件中.</li>
+<li>klog提供了由 -v 和 -vmodule&#x3D;file&#x3D;2 标志控制的 V-style 日志。</li>
+<li>klog 支持结构化日志，这意味着日志消息可以包含键值对。这使得使用外部工具过滤和分析日志变得更加容易。</li>
+<li>klog 允许通过命令行标志控制其行为。这些标志可以在启动 Go 应用程序时设置，以配置日志级别 (例如：–v&#x3D;2)、日志格式和其他与日志记录相关的设置。</li>
 </ul>
-<h2 id="kubelet-架构"><a href="#kubelet-架构" class="headerlink" title="kubelet 架构"></a>kubelet 架构</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png" srcset="/img/loading.gif" lazyload alt="2021-06-14-21-55-08"></p>
-<h3 id="重要组件"><a href="#重要组件" class="headerlink" title="重要组件"></a>重要组件</h3><p>kubelet 的架构由 N 多的组件组成，下面简单介绍下比较重要的几个：</p>
-<h4 id="PLEG"><a href="#PLEG" class="headerlink" title="[PLEG]"></a>[PLEG]</h4><p>即 <strong>Pod Lifecycle Event Generator</strong>，字面意思 Pod 生命周期事件（<code>ContainerStarted</code>、<code>ContainerDied</code>、<code>ContainerRemoved</code>、<code>ContainerChanged</code>）生成器。</p>
-<p>其维护着 Pod 缓存；定期通过 <code>ContainerRuntime</code> 获取 Pod 的信息，与缓存中的信息比较，生成如上的事件；将事件写入其维护的通道（channel）中。</p>
-<h4 id="PodWorkers"><a href="#PodWorkers" class="headerlink" title="[PodWorkers]"></a>[PodWorkers]</h4><p>处理事件中 Pod 的同步。核心方法 <code>managePodLoop()</code> 间接调用 <code>kubelet.syncPod()</code> 完成 Pod 的同步：</p>
-<ul>
-<li>如果 Pod 正在被创建，记录其延迟</li>
-<li>生成 Pod 的 API Status，即 <code>v1.PodStatus</code>：从运行时的 status 转换成 api status</li>
-<li>记录 Pod 从 <code>pending</code> 到 <code>running</code> 的耗时</li>
-<li>在 <code>StatusManager</code> 中更新 pod 的状态</li>
-<li>杀掉不应该运行的 Pod</li>
-<li>如果网络插件未就绪，只启动使用了主机网络（host network）的 Pod</li>
-<li>如果 static pod 不存在，为其创建镜像（Mirror）Pod</li>
-<li>为 Pod 创建文件系统目录：Pod 目录、卷目录、插件目录</li>
-<li>使用 <code>VolumeManager</code> 为 Pod 挂载卷</li>
-<li>获取 image pull secrets</li>
-<li>调用容器运行时（container runtime）的 <code>#SyncPod()</code> 方法</li>
-</ul>
-<h4 id="PodManager"><a href="#PodManager" class="headerlink" title="PodManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podmanager">PodManager</a></h4><p>存储 Pod 的期望状态，kubelet 服务的不同渠道的 Pod</p>
-<h4 id="StatsProvider"><a href="#StatsProvider" class="headerlink" title="StatsProvider"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#statsprovider">StatsProvider</a></h4><p>提供节点和容器的统计信息，有 <code>cAdvisor</code> 和 <code>CRI</code> 两种实现。</p>
-<h4 id="ContainerRuntime"><a href="#ContainerRuntime" class="headerlink" title="ContainerRuntime"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#containerruntime">ContainerRuntime</a></h4><p>顾名思义，容器运行时。与遵循 CRI 规范的高级容器运行时进行交互。</p>
-<h4 id="Deps-PodConfig"><a href="#Deps-PodConfig" class="headerlink" title="Deps.PodConfig"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#depspodconfig">Deps.PodConfig</a></h4><p>PodConfig 是一个配置多路复用器，它将许多 Pod 配置源合并成一个单一的一致结构，然后按顺序向监听器传递增量变更通知。</p>
-<p>配置源有：文件、apiserver、HTTP</p>
-<h4 id="SyncLoop"><a href="#SyncLoop" class="headerlink" title="SyncLoop"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">SyncLoop</a></h4><p>接收来自 <code>PodConfig</code> 的 Pod 变更通知、定时任务、<code>PLEG</code> 的事件，以及 <code>ProbeManager</code> 的事件，将 Pod 同步到<strong>期望状态</strong>。</p>
-<h4 id="PodAdmitHandlers"><a href="#PodAdmitHandlers" class="headerlink" title="PodAdmitHandlers"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podadmithandlers">PodAdmitHandlers</a></h4><p>Pod admission 过程中调用的一系列处理器，比如 eviction handler（节点内存有压力时，不会驱逐 QoS 设置为 <code>BestEffort</code> 的 Pod）、shutdown admit handler（当节点关闭时，不处理 pod 的同步操作）等。</p>
-<h4 id="OOMWatcher"><a href="#OOMWatcher" class="headerlink" title="OOMWatcher"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#oomwatcher">OOMWatcher</a></h4><p>从系统日志中获取容器的 OOM 日志，将其封装成事件并记录。</p>
-<h4 id="VolumeManger"><a href="#VolumeManger" class="headerlink" title="VolumeManger"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#volumemanger">VolumeManger</a></h4><p>VolumeManager 运行一组异步循环，根据在此节点上调度的 pod 确定需要附加&#x2F;挂载&#x2F;卸载&#x2F;分离哪些卷并执行操作。</p>
-<h4 id="CertificateManager"><a href="#CertificateManager" class="headerlink" title="CertificateManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#certificatemanager">CertificateManager</a></h4><p>处理证书轮换。</p>
-<h4 id="ProbeManager"><a href="#ProbeManager" class="headerlink" title="ProbeManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#probemanager">ProbeManager</a></h4><p>实际上包含了三种 Probe，提供 probe 结果缓存和通道。</p>
-<ul>
-<li>LivenessManager</li>
-<li>ReadinessManager</li>
-<li>StartupManager</li>
-</ul>
-<h4 id="EvictionManager"><a href="#EvictionManager" class="headerlink" title="EvictionManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#evictionmanager">EvictionManager</a></h4><p>监控 Node 节点的资源占用情况，根据驱逐规则驱逐 Pod 释放资源，缓解节点的压力。</p>
-<h4 id="PluginManager"><a href="#PluginManager" class="headerlink" title="PluginManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#pluginmanager">PluginManager</a></h4><p>PluginManager 运行一组异步循环，根据此节点确定哪些插件需要注册&#x2F;取消注册并执行。如 CSI 驱动和设备管理器插件（Device Plugin）。</p>
-<h5 id="CSI"><a href="#CSI" class="headerlink" title="CSI"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#csi">CSI</a></h5><p>Container Storage Interface，由存储厂商实现的存储驱动。</p>
-<h5 id="设备管理器插件（Device-Plugin）"><a href="#设备管理器插件（Device-Plugin）" class="headerlink" title="设备管理器插件（Device Plugin）"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E8%AE%BE%E5%A4%87%E7%AE%A1%E7%90%86%E5%99%A8%E6%8F%92%E4%BB%B6device-plugin">设备管理器插件（Device Plugin）</a></h5><p>Kubernetes 提供了一个 设备插件框架，你可以用它来将系统硬件资源发布到 Kubelet。</p>
-<p>供应商可以实现设备插件，由你手动部署或作为 DaemonSet 来部署，而不必定制 Kubernetes 本身的代码。目标设备包括 GPU、高性能 NIC、FPGA、 InfiniBand 适配器以及其他类似的、可能需要特定于供应商的初始化和设置的计算资源。</p>
-<h2 id="kubelet-的启动流程"><a href="#kubelet-的启动流程" class="headerlink" title="kubelet 的启动流程"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B">kubelet 的启动流程</a></h2><p>要分析 kubelet 的启动流程，可以从 kubelet 运行方式着手。找一个 Node 节点，很容易就能找到 kubelet 的进程。由于其是以 <code>systemd</code> 的方式启动，也可以通过 <code>systemctl</code> 查看其状态。</p>
-<h3 id="源码分析"><a href="#源码分析" class="headerlink" title="源码分析"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90">源码分析</a></h3><p>从 <code>git@github.com:kubernetes/kubernetes.git</code> 仓库获取代码，使用最新的 <code>release-1.21</code> 分支。</p>
-<ul>
-<li><code>cmd/kubelet/kubelet.go:35</code> 的 <code>main</code> 方法为程序入口。<ul>
-<li>调用 <code>NewKubeletCommand</code> 方法，创建 command</li>
-<li>执行 command<ul>
-<li><code>cmd/kubelet/app/server.go:434</code> 的 <code>Run</code> 方法。<ul>
-<li>调用 <code>RunKubelet</code> 方法。<ul>
-<li>调用 <code>createAndInitKubelet</code> 方法，创建并初始化 kubelet<ul>
-<li><code>pkg/kubelet/kubelet.go</code> 的 <code>NewMainKubelet</code> 方法，创建 kubelet的 各种组件。共十几个组件，见 <a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E6%9E%B6%E6%9E%84">kubelet 的构架</a>。</li>
-<li>调用 <code>BirtyCry</code> 方法：放出 <code>Starting</code> 事件</li>
-<li>调用 <code>StartGarbageCollection</code> 方法，开启 <code>ContainerGC</code> 和 <code>ImageGC</code></li>
-</ul>
-</li>
-<li>调用 <code>startKubelet</code> 方法（大量使用 goroutine 和通道）<ul>
-<li>goroutine：<code>kubelet.Run()</code><ul>
-<li>初始化模块<ul>
-<li>metrics 相关</li>
-<li>创建文件系统目录目录</li>
-<li>创建容器日志目录</li>
-<li>启动 <code>ImageGCManager</code></li>
-<li>启动 <code>ServerCertificateManager</code></li>
-<li>启动 <code>OOMWatcher</code></li>
-<li>启动 <code>ResourceAnalyzer</code></li>
-</ul>
-</li>
-<li>goroutine：<code>VolumeManager.Run()</code> 开始处理 Pod Volume 的卸载和挂载</li>
-<li>goroutine：状态更新 <code>fastStatusUpdateOnce()</code> （更新 Pod CIDR -&gt; 更新 <code>ContainerRuntime</code> 状态 -&gt; 更新 Node 节点状态）</li>
-<li>goroutine： <code>NodeLeaseController.Run()</code> 更新节点租约</li>
-<li>goroutine：<code>podKiller.PerformPodKillingWork</code> 杀掉未被正确处理的 pod</li>
-<li><code>StatusManager.Start()</code> 开始向 apiserver 更新 Pod 状态</li>
-<li><code>RuntimeClassManager.Start()</code></li>
-<li><code>PLEG.Start()</code>：持续从 <code>ContainerRuntime</code> 获取 Pod&#x2F;容器的状态，并与 kubelet 本地 cache 中的比较，生成对应的 <code>Event</code></li>
-<li><code>syncLoop()</code> 重点，**<em>持续监控并处理来自文件、apiserver、http 的变更</em>**。包括 Pod 的增加、更新、优雅删除、非优雅删除、调和。</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-<li>启动 server，暴露 <code>/healthz</code> 端点</li>
-<li>通知 <code>systemd</code> <code>kuberlet</code> 服务已经启动</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<h2 id="kubelet-的工作原理"><a href="#kubelet-的工作原理" class="headerlink" title="kubelet 的工作原理"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86">kubelet 的工作原理</a></h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png" srcset="/img/loading.gif" lazyload></p>
-<ol>
-<li>静态文件、apiserver 以及 HTTP 请求的 Pod 配置变更，被发送到 <code>kubelet.syncLoop</code></li>
-<li>PLEG 会定期通过容器运行时获取节点上 Pod 的状态，与其缓存中的 Pod 信息进行比较，封装成事件，进入 PLEG 的通道</li>
-<li>定期检查工作队列中的 Pod</li>
-<li>ProbeManager 的通道中的 Pod</li>
-<li>以上 1~4，都会进入 <code>syncLoopIteration</code>，并从对应的通道中获取到对应 Pod，将 Pod 的信息保存到 <code>PodManager</code>；然后分发给 <code>PodWorker</code>，[完成一些列的同步工作]</li>
-</ol>
-<p>转载自：<a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">https://atbug.com/kubelet-source-code-analysis/#syncloop</a></p>
+<h2 id="使用"><a href="#使用" class="headerlink" title="使用"></a>使用</h2><p>以下是在 Go 应用程序中使用 <code>klog</code> 的简单示例：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-keyword">package</span> main<br><br><span class="hljs-keyword">import</span> (<br>	<span class="hljs-string">&quot;k8s.io/klog/v2&quot;</span><br>)<br><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> &#123;<br>	klog.Info(<span class="hljs-string">&quot;这是一条信息消息&quot;</span>)<br>	klog.Warning(<span class="hljs-string">&quot;这是一条警告消息&quot;</span>)<br>	klog.Error(<span class="hljs-string">&quot;这是一条错误消息&quot;</span>)<br>	<span class="hljs-comment">// 可以使用 klog 包的其他功能进行额外的配置和日志记录。</span><br>	<br>	klog.V(<span class="hljs-number">1</span>).Info(<span class="hljs-string">&quot;这是一条Level为1的消息&quot;</span>)<br>	klog.V(<span class="hljs-number">2</span>).Info(<span class="hljs-string">&quot;这是一条Level为2的消息&quot;</span>)<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>通过设置 –v 标志，你可以调整日志的详细程度：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs shell">./your_app --v=2<br></code></pre></td></tr></table></figure>
+
+<p>例如，当我们想要查看 kubernetes的组件的详细信息时，我们可以通过调整<code>--v</code>标志调整其日志输出级别：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs golang">root@k8s002:pts/<span class="hljs-number">20</span>-&gt;/root (<span class="hljs-number">0</span>)<br>&gt; kubectl get pods -n kube-system<br>NAME                             READY   STATUS    RESTARTS   AGE<br>coredns<span class="hljs-number">-7</span>f89b7bc75<span class="hljs-number">-992</span>fg         <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>coredns<span class="hljs-number">-7</span>f89b7bc75-zq9xn         <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>etcd-k8s002                      <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-apiserver-k8s002            <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-controller-manager-k8s002   <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">28</span>         <span class="hljs-number">85</span>d<br>kube-proxy-lcwzq                 <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-scheduler-k8s002            <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">28</span>         <span class="hljs-number">85</span>d<br>-----------------------------------------------<br>root@k8s002:pts/<span class="hljs-number">20</span>-&gt;/root (<span class="hljs-number">0</span>)<br>&gt; kubectl get pods -n kube-system --v=<span class="hljs-number">6</span><br>I1219 <span class="hljs-number">23</span>:<span class="hljs-number">22</span>:<span class="hljs-number">41.474328</span>   <span class="hljs-number">25577</span> loader.<span class="hljs-keyword">go</span>:<span class="hljs-number">379</span>] Config loaded from file:  /root/.kube/config<br>I1219 <span class="hljs-number">23</span>:<span class="hljs-number">22</span>:<span class="hljs-number">41.491635</span>   <span class="hljs-number">25577</span> round_trippers.<span class="hljs-keyword">go</span>:<span class="hljs-number">445</span>] GET https:<span class="hljs-comment">//47.123.6.56:6443/api/v1/namespaces/kube-system/pods?limit=500 200 OK in 11 milliseconds</span><br>NAME                             READY   STATUS    RESTARTS   AGE<br>coredns<span class="hljs-number">-7</span>f89b7bc75<span class="hljs-number">-992</span>fg         <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>coredns<span class="hljs-number">-7</span>f89b7bc75-zq9xn         <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>etcd-k8s002                      <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-apiserver-k8s002            <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-controller-manager-k8s002   <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">28</span>         <span class="hljs-number">85</span>d<br>kube-proxy-lcwzq                 <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">0</span>          <span class="hljs-number">85</span>d<br>kube-scheduler-k8s002            <span class="hljs-number">1</span>/<span class="hljs-number">1</span>     Running   <span class="hljs-number">28</span>         <span class="hljs-number">85</span>d<br></code></pre></td></tr></table></figure>
+
+
 
                 
               </div>
@@ -418,7 +328,7 @@
       
         <a href="/tags/kubernetes/" class="print-no-link">#kubernetes</a>
       
-        <a href="/tags/kubelet/" class="print-no-link">#kubelet</a>
+        <a href="/tags/klog/" class="print-no-link">#klog</a>
       
     </div>
   
@@ -430,8 +340,8 @@
 
   <div class="license-box my-3">
     <div class="license-title">
-      <div>Kubelet详解</div>
-      <div>https://chriskery.github.io/2023/11/30/Kubelet详解/</div>
+      <div>kubernetes-klog简介</div>
+      <div>https://chriskery.github.io/2023/12/19/kubernetes-klog简介/</div>
     </div>
     <div class="license-meta">
       
@@ -443,7 +353,7 @@
       
         <div class="license-meta-item license-meta-date">
           <div>发布于</div>
-          <div>2023年11月30日</div>
+          <div>2023年12月19日</div>
         </div>
       
       
@@ -475,9 +385,9 @@
                   <article class="post-prev col-6">
                     
                     
-                      <a href="/2023/12/02/Kubernetes-Leader-Election%E6%9C%BA%E5%88%B6/" title="Kubernetes Leader Election机制详解">
+                      <a href="/2023/12/20/Kubelet%E8%AF%A6%E8%A7%A3%EF%BC%88%E4%BA%8C%EF%BC%89/" title="Kubelet详解（二）- Pod同步流程">
                         <i class="iconfont icon-arrowleft"></i>
-                        <span class="hidden-mobile">Kubernetes Leader Election机制详解</span>
+                        <span class="hidden-mobile">Kubelet详解（二）- Pod同步流程</span>
                         <span class="visible-mobile">上一篇</span>
                       </a>
                     
@@ -485,8 +395,8 @@
                   <article class="post-next col-6">
                     
                     
-                      <a href="/2023/11/30/Containerd%E8%AF%A6%E8%A7%A3/" title="Containerd详解">
-                        <span class="hidden-mobile">Containerd详解</span>
+                      <a href="/2023/12/11/kubernetes-Informer%E8%AF%A6%E8%A7%A3/" title="kubernetes-Informer详解">
+                        <span class="hidden-mobile">kubernetes-Informer详解</span>
                         <span class="visible-mobile">下一篇</span>
                         <i class="iconfont icon-arrowright"></i>
                       </a>

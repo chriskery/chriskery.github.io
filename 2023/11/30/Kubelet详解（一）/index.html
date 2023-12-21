@@ -1,0 +1,783 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png-fake">
+  <link rel="icon" href="/img/fluid.png-fake">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Chris Kery">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kubelet详解（一）- Kubelet启动流程">
+<meta property="og:url" content="https://chriskery.github.io/2023/11/30/Kubelet%E8%AF%A6%E8%A7%A3%EF%BC%88%E4%B8%80%EF%BC%89/index.html">
+<meta property="og:site_name" content="Chriskery&#39;s Blog">
+<meta property="og:description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png">
+<meta property="article:published_time" content="2023-11-30T14:37:02.000Z">
+<meta property="article:modified_time" content="2023-12-21T15:21:09.624Z">
+<meta property="article:author" content="Chris Kery">
+<meta property="article:tag" content="kubernetes">
+<meta property="article:tag" content="kubelet">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
+  
+  
+    <meta name="referrer" content="no-referrer-when-downgrade">
+  
+  
+  <title>Kubelet详解（一）- Kubelet启动流程 - Chriskery&#39;s Blog</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_hj8rtnfg7um.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_lbnruvf0jn.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"chriskery.github.io","root":"/","version":"1.9.5","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 7.0.0"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 70vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>chriskery&#39;s blog</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                <span>首页</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                <span>分类</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>标签</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>归档</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" target="_blank" rel="noopener" href="https://github.com/chriskery">
+                <i class="iconfont icon-user-fill"></i>
+                <span>关于</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Kubelet详解（一）- Kubelet启动流程"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2023-11-30 22:37" pubdate>
+          2023年11月30日 晚上
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.3k 字
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          28 分钟
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Kubelet详解（一）- Kubelet启动流程</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="kubelet简介"><a href="#kubelet简介" class="headerlink" title="kubelet简介"></a>kubelet简介</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png" srcset="/img/loading.gif" lazyload alt="Kubernetes 的架构图"></p>
+<p>kubelet 的功能介绍：</p>
+<ul>
+<li>kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 <code>hostname</code>；覆盖 <code>host</code> 的参数；或者云提供商指定的逻辑。</li>
+<li>kubelet 基于 <code>PodSpec</code> 工作。<code>PodSpec</code> 是用 <code>YAML</code> 或者 <code>JSON</code> 对象来描述 Pod。Kubelet 接受通过各种机制（主要是 apiserver）提供的一组 <code>PodSpec</code>，并确保里面描述的容器良好运行。</li>
+</ul>
+<h2 id="kubelet-架构"><a href="#kubelet-架构" class="headerlink" title="kubelet 架构"></a>kubelet 架构</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png" srcset="/img/loading.gif" lazyload alt="2021-06-14-21-55-08"></p>
+<h3 id="重要组件"><a href="#重要组件" class="headerlink" title="重要组件"></a>重要组件</h3><p>kubelet 的架构由 N 多的组件组成，下面简单介绍下比较重要的几个：</p>
+<h4 id="PLEG"><a href="#PLEG" class="headerlink" title="[PLEG]"></a>[PLEG]</h4><p>即 <strong>Pod Lifecycle Event Generator</strong>，字面意思 Pod 生命周期事件（<code>ContainerStarted</code>、<code>ContainerDied</code>、<code>ContainerRemoved</code>、<code>ContainerChanged</code>）生成器。</p>
+<p>其维护着 Pod 缓存；定期通过 <code>ContainerRuntime</code> 获取 Pod 的信息，与缓存中的信息比较，生成如上的事件；将事件写入其维护的通道（channel）中。</p>
+<h4 id="PodWorkers"><a href="#PodWorkers" class="headerlink" title="[PodWorkers]"></a>[PodWorkers]</h4><p>处理事件中 Pod 的同步。核心方法 <code>managePodLoop()</code> 间接调用 <code>kubelet.syncPod()</code> 完成 Pod 的同步：</p>
+<ul>
+<li>如果 Pod 正在被创建，记录其延迟</li>
+<li>生成 Pod 的 API Status，即 <code>v1.PodStatus</code>：从运行时的 status 转换成 api status</li>
+<li>记录 Pod 从 <code>pending</code> 到 <code>running</code> 的耗时</li>
+<li>在 <code>StatusManager</code> 中更新 pod 的状态</li>
+<li>杀掉不应该运行的 Pod</li>
+<li>如果网络插件未就绪，只启动使用了主机网络（host network）的 Pod</li>
+<li>如果 static pod 不存在，为其创建镜像（Mirror）Pod</li>
+<li>为 Pod 创建文件系统目录：Pod 目录、卷目录、插件目录</li>
+<li>使用 <code>VolumeManager</code> 为 Pod 挂载卷</li>
+<li>获取 image pull secrets</li>
+<li>调用容器运行时（container runtime）的 <code>#SyncPod()</code> 方法</li>
+</ul>
+<h4 id="PodManager"><a href="#PodManager" class="headerlink" title="PodManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podmanager">PodManager</a></h4><p>存储 Pod 的期望状态，kubelet 服务的不同渠道的 Pod</p>
+<h4 id="StatsProvider"><a href="#StatsProvider" class="headerlink" title="StatsProvider"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#statsprovider">StatsProvider</a></h4><p>提供节点和容器的统计信息，有 <code>cAdvisor</code> 和 <code>CRI</code> 两种实现。</p>
+<h4 id="ContainerRuntime"><a href="#ContainerRuntime" class="headerlink" title="ContainerRuntime"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#containerruntime">ContainerRuntime</a></h4><p>顾名思义，容器运行时。与遵循 CRI 规范的高级容器运行时进行交互。</p>
+<h4 id="Deps-PodConfig"><a href="#Deps-PodConfig" class="headerlink" title="Deps.PodConfig"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#depspodconfig">Deps.PodConfig</a></h4><p>PodConfig 是一个配置多路复用器，它将许多 Pod 配置源合并成一个单一的一致结构，然后按顺序向监听器传递增量变更通知。</p>
+<p>配置源有：文件、apiserver、HTTP</p>
+<h4 id="SyncLoop"><a href="#SyncLoop" class="headerlink" title="SyncLoop"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">SyncLoop</a></h4><p>接收来自 <code>PodConfig</code> 的 Pod 变更通知、定时任务、<code>PLEG</code> 的事件，以及 <code>ProbeManager</code> 的事件，将 Pod 同步到<strong>期望状态</strong>。</p>
+<h4 id="PodAdmitHandlers"><a href="#PodAdmitHandlers" class="headerlink" title="PodAdmitHandlers"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podadmithandlers">PodAdmitHandlers</a></h4><p>Pod admission 过程中调用的一系列处理器，比如 eviction handler（节点内存有压力时，不会驱逐 QoS 设置为 <code>BestEffort</code> 的 Pod）、shutdown admit handler（当节点关闭时，不处理 pod 的同步操作）等。</p>
+<h4 id="OOMWatcher"><a href="#OOMWatcher" class="headerlink" title="OOMWatcher"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#oomwatcher">OOMWatcher</a></h4><p>从系统日志中获取容器的 OOM 日志，将其封装成事件并记录。</p>
+<h4 id="VolumeManger"><a href="#VolumeManger" class="headerlink" title="VolumeManger"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#volumemanger">VolumeManger</a></h4><p>VolumeManager 运行一组异步循环，根据在此节点上调度的 pod 确定需要附加&#x2F;挂载&#x2F;卸载&#x2F;分离哪些卷并执行操作。</p>
+<h4 id="CertificateManager"><a href="#CertificateManager" class="headerlink" title="CertificateManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#certificatemanager">CertificateManager</a></h4><p>处理证书轮换。</p>
+<h4 id="ProbeManager"><a href="#ProbeManager" class="headerlink" title="ProbeManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#probemanager">ProbeManager</a></h4><p>实际上包含了三种 Probe，提供 probe 结果缓存和通道。</p>
+<ul>
+<li>LivenessManager</li>
+<li>ReadinessManager</li>
+<li>StartupManager</li>
+</ul>
+<h4 id="EvictionManager"><a href="#EvictionManager" class="headerlink" title="EvictionManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#evictionmanager">EvictionManager</a></h4><p>监控 Node 节点的资源占用情况，根据驱逐规则驱逐 Pod 释放资源，缓解节点的压力。</p>
+<h4 id="PluginManager"><a href="#PluginManager" class="headerlink" title="PluginManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#pluginmanager">PluginManager</a></h4><p>PluginManager 运行一组异步循环，根据此节点确定哪些插件需要注册&#x2F;取消注册并执行。如 CSI 驱动和设备管理器插件（Device Plugin）。</p>
+<h5 id="CSI"><a href="#CSI" class="headerlink" title="CSI"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#csi">CSI</a></h5><p>Container Storage Interface，由存储厂商实现的存储驱动。</p>
+<h5 id="设备管理器插件（Device-Plugin）"><a href="#设备管理器插件（Device-Plugin）" class="headerlink" title="设备管理器插件（Device Plugin）"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E8%AE%BE%E5%A4%87%E7%AE%A1%E7%90%86%E5%99%A8%E6%8F%92%E4%BB%B6device-plugin">设备管理器插件（Device Plugin）</a></h5><p>Kubernetes 提供了一个 设备插件框架，你可以用它来将系统硬件资源发布到 Kubelet。</p>
+<p>供应商可以实现设备插件，由你手动部署或作为 DaemonSet 来部署，而不必定制 Kubernetes 本身的代码。目标设备包括 GPU、高性能 NIC、FPGA、 InfiniBand 适配器以及其他类似的、可能需要特定于供应商的初始化和设置的计算资源。</p>
+<h2 id="kubelet-的启动流程"><a href="#kubelet-的启动流程" class="headerlink" title="kubelet 的启动流程"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B">kubelet 的启动流程</a></h2><p>要分析 kubelet 的启动流程，可以从 kubelet 运行方式着手。找一个 Node 节点，很容易就能找到 kubelet 的进程。由于其是以 <code>systemd</code> 的方式启动，也可以通过 <code>systemctl</code> 查看其状态。</p>
+<h3 id="源码分析"><a href="#源码分析" class="headerlink" title="源码分析"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90">源码分析</a></h3><p>从 <code>git@github.com:kubernetes/kubernetes.git</code> 仓库获取代码，使用最新的 <code>release-1.21</code> 分支。</p>
+<ul>
+<li><code>cmd/kubelet/kubelet.go:35</code> 的 <code>main</code> 方法为程序入口。<ul>
+<li>调用 <code>NewKubeletCommand</code> 方法，创建 command</li>
+<li>执行 command<ul>
+<li><code>cmd/kubelet/app/server.go:434</code> 的 <code>Run</code> 方法。<ul>
+<li>调用 <code>RunKubelet</code> 方法。<ul>
+<li>调用 <code>createAndInitKubelet</code> 方法，创建并初始化 kubelet<ul>
+<li><code>pkg/kubelet/kubelet.go</code> 的 <code>NewMainKubelet</code> 方法，创建 kubelet的 各种组件。共十几个组件，见 <a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E6%9E%B6%E6%9E%84">kubelet 的构架</a>。</li>
+<li>调用 <code>BirtyCry</code> 方法：放出 <code>Starting</code> 事件</li>
+<li>调用 <code>StartGarbageCollection</code> 方法，开启 <code>ContainerGC</code> 和 <code>ImageGC</code></li>
+</ul>
+</li>
+<li>调用 <code>startKubelet</code> 方法（大量使用 goroutine 和通道）<ul>
+<li>goroutine：<code>kubelet.Run()</code><ul>
+<li>初始化模块<ul>
+<li>metrics 相关</li>
+<li>创建文件系统目录目录</li>
+<li>创建容器日志目录</li>
+<li>启动 <code>ImageGCManager</code></li>
+<li>启动 <code>ServerCertificateManager</code></li>
+<li>启动 <code>OOMWatcher</code></li>
+<li>启动 <code>ResourceAnalyzer</code></li>
+</ul>
+</li>
+<li>goroutine：<code>VolumeManager.Run()</code> 开始处理 Pod Volume 的卸载和挂载</li>
+<li>goroutine：状态更新 <code>fastStatusUpdateOnce()</code> （更新 Pod CIDR -&gt; 更新 <code>ContainerRuntime</code> 状态 -&gt; 更新 Node 节点状态）</li>
+<li>goroutine： <code>NodeLeaseController.Run()</code> 更新节点租约</li>
+<li>goroutine：<code>podKiller.PerformPodKillingWork</code> 杀掉未被正确处理的 pod</li>
+<li><code>StatusManager.Start()</code> 开始向 apiserver 更新 Pod 状态</li>
+<li><code>RuntimeClassManager.Start()</code></li>
+<li><code>PLEG.Start()</code>：持续从 <code>ContainerRuntime</code> 获取 Pod&#x2F;容器的状态，并与 kubelet 本地 cache 中的比较，生成对应的 <code>Event</code></li>
+<li><code>syncLoop()</code> 重点，**<em>持续监控并处理来自文件、apiserver、http 的变更</em>**。包括 Pod 的增加、更新、优雅删除、非优雅删除、调和。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>启动 server，暴露 <code>/healthz</code> 端点</li>
+<li>通知 <code>systemd</code> <code>kuberlet</code> 服务已经启动</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="kubelet-的工作原理"><a href="#kubelet-的工作原理" class="headerlink" title="kubelet 的工作原理"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86">kubelet 的工作原理</a></h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png" srcset="/img/loading.gif" lazyload></p>
+<ol>
+<li>静态文件、apiserver 以及 HTTP 请求的 Pod 配置变更，被发送到 <code>kubelet.syncLoop</code></li>
+<li>PLEG 会定期通过容器运行时获取节点上 Pod 的状态，与其缓存中的 Pod 信息进行比较，封装成事件，进入 PLEG 的通道</li>
+<li>定期检查工作队列中的 Pod</li>
+<li>ProbeManager 的通道中的 Pod</li>
+<li>以上 1~4，都会进入 <code>syncLoopIteration</code>，并从对应的通道中获取到对应 Pod，将 Pod 的信息保存到 <code>PodManager</code>；然后分发给 <code>PodWorker</code>，[完成一些列的同步工作]</li>
+</ol>
+<p>转载自：<a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">https://atbug.com/kubelet-source-code-analysis/#syncloop</a></p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/kubernetes/" class="category-chain-item">kubernetes</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/kubernetes/" class="print-no-link">#kubernetes</a>
+      
+        <a href="/tags/kubelet/" class="print-no-link">#kubelet</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Kubelet详解（一）- Kubelet启动流程</div>
+      <div>https://chriskery.github.io/2023/11/30/Kubelet详解（一）/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>作者</div>
+          <div>Chris Kery</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>发布于</div>
+          <div>2023年11月30日</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>许可协议</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - 署名">
+                    <i class="iconfont icon-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2023/12/02/Kubernetes-Leader-Election%E6%9C%BA%E5%88%B6/" title="Kubernetes Leader Election机制详解">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Kubernetes Leader Election机制详解</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2023/11/30/Containerd%E8%AF%A6%E8%A7%A3/" title="Containerd详解">
+                        <span class="hidden-mobile">Containerd详解</span>
+                        <span class="visible-mobile">下一篇</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>目录</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+    <div class="statistics">
+  
+  
+
+  
+    
+      <span id="busuanzi_container_site_pv" style="display: none">
+        总访问量 
+        <span id="busuanzi_value_site_pv"></span>
+         次
+      </span>
+    
+    
+      <span id="busuanzi_container_site_uv" style="display: none">
+        总访客数 
+        <span id="busuanzi_value_site_uv"></span>
+         人
+      </span>
+    
+    
+  
+</div>
+
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    window.tocbot.init(Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc));
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/4.3.1/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+  <script defer src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">博客在允许 JavaScript 运行的环境下浏览效果更佳</div>
+  </noscript>
+</body>
+</html>

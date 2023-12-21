@@ -16,22 +16,25 @@
   <meta name="author" content="Chris Kery">
   <meta name="keywords" content="">
   
-    <meta name="description" content="什么是卷积卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。 假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。这称为特征映射。 从理论上说，特征映射过程非常简单。您将扫描图像中的每个像素，然后查看其相邻像素。您需将这些像素的值乘以过滤条件中的等效权重。 例如：  在这种情况下，系">
+    <meta name="description" content="什么是卷积卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。事实上，卷积就是一种数学运算，跟加减乘除没有本质的区别。虽然这种运算本身很复杂，但它非常有助于简化更复杂的表达式. 假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。使用卷积输出的是一幅修改后的图像，这在深度学习中称为特征">
 <meta property="og:type" content="article">
 <meta property="og:title" content="ML入门-使用卷积和池化增强计算机视觉模型">
 <meta property="og:url" content="https://chriskery.github.io/2023/12/05/ML%E5%85%A5%E9%97%A8-%E4%BD%BF%E7%94%A8%E5%8D%B7%E7%A7%AF%E5%92%8C%E6%B1%A0%E5%8C%96%E5%A2%9E%E5%BC%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E8%A7%86%E8%A7%89%E6%A8%A1%E5%9E%8B/index.html">
 <meta property="og:site_name" content="Chriskery&#39;s Blog">
-<meta property="og:description" content="什么是卷积卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。 假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。这称为特征映射。 从理论上说，特征映射过程非常简单。您将扫描图像中的每个像素，然后查看其相邻像素。您需将这些像素的值乘以过滤条件中的等效权重。 例如：  在这种情况下，系">
+<meta property="og:description" content="什么是卷积卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。事实上，卷积就是一种数学运算，跟加减乘除没有本质的区别。虽然这种运算本身很复杂，但它非常有助于简化更复杂的表达式. 假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。使用卷积输出的是一幅修改后的图像，这在深度学习中称为特征">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/f7b0ab29e09a51f.png?hl=zh-cn">
+<meta property="og:image" content="https://pic1.zhimg.com/v2-625af6a961d1476dfff000ee0d936ce8_b.webp">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/edb460dd5397f7f4.png?hl=zh-cn">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/48ff667b2df812ad.png?hl=zh-cn">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/6f1cc59befac4d33.png?hl=zh-cn">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/705ec1004fce21d4.png?hl=zh-cn">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/6029904d82700d8e.png?hl=zh-cn">
 <meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/1f5ebdafd1db2595.png?hl=zh-cn">
+<meta property="og:image" content="https://pic4.zhimg.com/v2-45259486c87abae677e7f4f4bb89176b_b.webp">
+<meta property="og:image" content="https://s2.51cto.com/images/blog/202302/15152631_63ec8927df6f311186.jpg?x-oss-process=image/watermark,size_16,text_QDUxQ1RP5Y2a5a6i,color_FFFFFF,t_30,g_se,x_10,y_10,shadow_20,type_ZmFuZ3poZW5naGVpdGk=/format,webp/resize,m_fixed,w_1184">
 <meta property="article:published_time" content="2023-12-05T11:39:12.000Z">
-<meta property="article:modified_time" content="2023-12-05T11:54:28.033Z">
+<meta property="article:modified_time" content="2023-12-06T07:06:47.651Z">
 <meta property="article:author" content="Chris Kery">
 <meta property="article:tag" content="ml">
 <meta name="twitter:card" content="summary_large_image">
@@ -230,7 +233,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          3.3k 字
+          4.2k 字
         
       </span>
     
@@ -241,7 +244,7 @@
         
         
         
-          28 分钟
+          35 分钟
         
       </span>
     
@@ -283,13 +286,24 @@
             
               <div class="markdown-body">
                 
-                <h2 id="什么是卷积"><a href="#什么是卷积" class="headerlink" title="什么是卷积"></a>什么是卷积</h2><p>卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。</p>
-<p>假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。这称为特征映射。</p>
+                <h2 id="什么是卷积"><a href="#什么是卷积" class="headerlink" title="什么是卷积"></a>什么是卷积</h2><p>卷积是一种过滤条件，可遍历图片、对其进行处理，然后提取重要的特征。事实上，卷积就是一种数学运算，跟加减乘除没有本质的区别。虽然这种运算本身很复杂，但它非常有助于简化更复杂的表达式.</p>
+<p>假设您有一幅穿着运动鞋的人的图像。如何检测图像中是否存在运动鞋？为了让您的程序“看到”运动鞋的图像，您必须提取重要的特征，并对不必要的功能进行模糊处理。使用卷积输出的是一幅修改后的图像，这在深度学习中称为特征映射(feature map)。</p>
 <p>从理论上说，特征映射过程非常简单。您将扫描图像中的每个像素，然后查看其相邻像素。您需将这些像素的值乘以过滤条件中的等效权重。</p>
 <p>例如：</p>
 <p><img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/f7b0ab29e09a51f.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="图像上的卷积"></p>
-<p>在这种情况下，系统会指定 3x3 的卷积矩阵或图像内核。</p>
-<p>当前的像素值为 192。您可以通过以下方式计算新像素的值：查看邻域值，将其乘以过滤条件中指定的值，并使新像素值设为最终值。</p>
+<p>在这种情况下，系统会指定 3x3 的卷积矩阵（称之为卷积核）。卷积核的大小和模式为一个搅拌图片的方法。</p>
+<blockquote>
+<ul>
+<li>单通道图片俗称灰度图，图片由二维矩阵构成，每个像素点都有一个值表示颜色。  </li>
+<li>三通道图片：三通道分别指RGB(红，绿，蓝)通道。将通道红绿蓝三通道比作三个手电筒，那么RGB的值就是三个手电筒的灯光亮度。如果R,G,B三个通道的亮度一致，即R&#x3D;G&#x3D;B，那么这样的图片就是灰度模式的图片。如果这三个值不相等，那么就是彩色图。三通道图片由三个矩阵构成，其中每个元素都是0到255之间的一个整数。</li>
+</ul>
+</blockquote>
+<p>当前的像素值为 192。您可以通过以下方式计算新像素的值：查看邻域值，将其乘以过滤条件中指定的值，并使新像素值设为最终值。(不同于矩阵乘法，却类似向量内积，这里是两个相同大小的矩阵的“点乘”)。当一个像素计算完毕后，移动一个像素到下一个区块执行相同的运算。</p>
+<p><img src="https://pic1.zhimg.com/v2-625af6a961d1476dfff000ee0d936ce8_b.webp" srcset="/img/loading.gif" lazyload></p>
+<p>通常卷积神经网络并不学习单一的核，而是同时学习多层级的多个核。比如一个32x16x16的核用到256×256的图像上去会产生32个241×241个feature map。</p>
+<blockquote>
+<p>feature map的大小计算公式为：image size - kernel size +1。</p>
+</blockquote>
 <p>现在，您可以通过对 2D 灰度图像创建基本卷积来探索卷积的工作原理。</p>
 <p>您将使用 <a target="_blank" rel="noopener" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.misc.ascent.html">SciPy 的升序图像</a>来进行演示。这是一个很好的内置图片工具，有许多角度和线条。</p>
 <h3 id="卷积的应用场景"><a href="#卷积的应用场景" class="headerlink" title="卷积的应用场景"></a>卷积的应用场景</h3><ol>
@@ -297,27 +311,27 @@
 <li>图像处理输入一幅图像f(x,y)，经过特定设计的卷积核g(x,y)进行卷积处理以后，输出图像将会得到模糊，边缘强化等各种效果。</li>
 </ol>
 <h2 id="开始编码"><a href="#开始编码" class="headerlink" title="开始编码"></a>开始编码</h2><p>首先导入一些 Python 库和升序图片：</p>
-<figure class="highlight elm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs elm"><span class="hljs-keyword">import</span> cv2import numpy <span class="hljs-keyword">as</span> npfrom scipy <span class="hljs-keyword">import</span> misci = misc.ascent()<br></code></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">import</span> cv2<br><span class="hljs-keyword">import</span> numpy <span class="hljs-keyword">as</span> np<br><span class="hljs-keyword">from</span> scipy <span class="hljs-keyword">import</span> misc<br>i = misc.ascent()<br></code></pre></td></tr></table></figure>
 
 <p>接下来，使用 Pyplot 库 <code>matplotlib</code> 绘制图像，以便您了解图像：</p>
-<figure class="highlight elm"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs elm"><span class="hljs-keyword">import</span> matplotlib.pyplot <span class="hljs-keyword">as</span> pltplt.grid(<span class="hljs-type">False</span>)plt.gray()plt.axis(&#x27;off&#x27;)plt.imshow(i)plt.show()<br></code></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">import</span> matplotlib.pyplot <span class="hljs-keyword">as</span> plt<br>plt.grid(<span class="hljs-literal">False</span>)<br>plt.gray()<br>plt.axis(<span class="hljs-string">&#x27;off&#x27;</span>)<br>plt.imshow(i)<br>plt.show()<br></code></pre></td></tr></table></figure>
 
 <p><img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/edb460dd5397f7f4.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="edb460dd5397f7f4.png"></p>
 <p>您可以看到这是一张楼梯井的图像。您可以尝试并查明大量特征。例如，有很强的垂直线。</p>
 <p>图像会存储为 NumPy 数组，因此我们只需复制该数组即可创建转换后的图像。size_x 和 size_y 变量将存储图像的尺寸，以便您稍后循环遍历该图像。</p>
-<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs stylus">i_transformed = np<span class="hljs-selector-class">.copy</span>(i)size_x = i_transformed<span class="hljs-selector-class">.shape</span><span class="hljs-selector-attr">[0]</span>size_y = i_transformed<span class="hljs-selector-class">.shape</span><span class="hljs-selector-attr">[1]</span><br></code></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs python">i_transformed = np.copy(i)<br>size_x = i_transformed.shape[<span class="hljs-number">0</span>]<br>size_y = i_transformed.shape[<span class="hljs-number">1</span>]<br></code></pre></td></tr></table></figure>
 
 
-<h2 id="4-创建卷积矩阵"><a href="#4-创建卷积矩阵" class="headerlink" title="4. 创建卷积矩阵"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#3">4. 创建卷积矩阵</a></h2><p>首先，将卷积矩阵（或内核）构建成 3x3 数组：</p>
-<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-comment"># This filter detects edges nicely# It creates a filter that only passes through sharp edges and straight lines.# Experiment with different values for fun effects.#filter = [ [0, 1, 0], [1, -4, 1], [0, 1, 0]]# A couple more filters to try for fun!filter = [ [-1, -2, -1], [0, 0, 0], [1, 2, 1]]#filter = [ [-1, 0, 1], [-2, 0, 2], [-1, 0, 1]] # If all the digits in the filter don&#x27;t add up to 0 or 1, you# should probably do a weight to get it to do so# so, for example, if your weights are 1,1,1 1,2,1 1,1,1# They add up to 10, so you would set a weight of .1 if you want to normalize themweight  = 1</span><br></code></pre></td></tr></table></figure>
+<h2 id="创建卷积矩阵"><a href="#创建卷积矩阵" class="headerlink" title="创建卷积矩阵"></a>创建卷积矩阵</h2><p>首先，将卷积矩阵（或内核）构建成 3x3 数组：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-comment"># This filter detects edges nicely</span><br><span class="hljs-comment"># It creates a filter that only passes through sharp edges and straight lines.</span><br><span class="hljs-comment"># Experiment with different values for fun effects.  </span><br><span class="hljs-built_in">filter</span> = [ [<span class="hljs-number">0</span>, <span class="hljs-number">1</span>, <span class="hljs-number">0</span>], [<span class="hljs-number">1</span>, -<span class="hljs-number">4</span>, <span class="hljs-number">1</span>], [<span class="hljs-number">0</span>, <span class="hljs-number">1</span>, <span class="hljs-number">0</span>]]<br><span class="hljs-comment"># A couple more filters to try for fun!filter = [ [-1, -2, -1], [0, 0, 0], [1, 2, 1]]</span><br><span class="hljs-comment">#filter = [ [-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]</span><br><span class="hljs-comment"># If all the digits in the filter don&#x27;t add up to 0 or 1, you</span><br><span class="hljs-comment"># should probably do a weight to get it to do so</span><br><span class="hljs-comment"># so, for example, if your weights are 1,1,1 1,2,1 1,1,1</span><br><span class="hljs-comment"># They add up to 10, so you would set a weight of .1 if you want to normalize them</span><br>weight  = <span class="hljs-number">1</span><br></code></pre></td></tr></table></figure>
 
 <p>现在，计算输出像素。迭代图像，保留 1 像素的外边距，并将当前像素的每个邻域乘以该过滤条件中定义的值。</p>
 <p>这意味着当前像素的邻近像素和位于左侧的像素将乘以过滤条件中的左上角项。然后，用所得结果乘以权重，确保结果介于 0 到 255 之间。</p>
 <p>最后，将新值加载到转换后的图像中：</p>
-<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">for</span> x in range(<span class="hljs-number">1</span>,size_x-<span class="hljs-number">1</span>):  for y in range(<span class="hljs-number">1</span>,size_y-<span class="hljs-number">1</span>):      output_pixel = <span class="hljs-number">0</span>.<span class="hljs-number">0</span>      output_pixel = output_pixel + (i[x - <span class="hljs-number">1</span>, y-<span class="hljs-number">1</span>] * filter[<span class="hljs-number">0</span>][<span class="hljs-number">0</span>])      output_pixel = output_pixel + (i[x, y-<span class="hljs-number">1</span>] * filter[<span class="hljs-number">0</span>][<span class="hljs-number">1</span>])      output_pixel = output_pixel + (i[x + <span class="hljs-number">1</span>, y-<span class="hljs-number">1</span>] * filter[<span class="hljs-number">0</span>][<span class="hljs-number">2</span>])      output_pixel = output_pixel + (i[x-<span class="hljs-number">1</span>, y] * filter[<span class="hljs-number">1</span>][<span class="hljs-number">0</span>])      output_pixel = output_pixel + (i[x, y] * filter[<span class="hljs-number">1</span>][<span class="hljs-number">1</span>])      output_pixel = output_pixel + (i[x+<span class="hljs-number">1</span>, y] * filter[<span class="hljs-number">1</span>][<span class="hljs-number">2</span>])      output_pixel = output_pixel + (i[x-<span class="hljs-number">1</span>, y+<span class="hljs-number">1</span>] * filter[<span class="hljs-number">2</span>][<span class="hljs-number">0</span>])      output_pixel = output_pixel + (i[x, y+<span class="hljs-number">1</span>] * filter[<span class="hljs-number">2</span>][<span class="hljs-number">1</span>])      output_pixel = output_pixel + (i[x+<span class="hljs-number">1</span>, y+<span class="hljs-number">1</span>] * filter[<span class="hljs-number">2</span>][<span class="hljs-number">2</span>])      output_pixel = output_pixel * weight      if(output_pixel&lt;<span class="hljs-number">0</span>):        output_pixel=<span class="hljs-number">0</span>      if(output_pixel&gt;<span class="hljs-number">255</span>):        output_pixel=<span class="hljs-number">255</span>      i_transformed[x, y] = output_pixel<br></code></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">for</span> x <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, size_x - <span class="hljs-number">1</span>):<br>    <span class="hljs-keyword">for</span> y <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">1</span>, size_y - <span class="hljs-number">1</span>):<br>        output_pixel = <span class="hljs-number">0.0</span><br>        <span class="hljs-comment"># 3x3 metric cal</span><br>        output_pixel = output_pixel + (i[x - <span class="hljs-number">1</span>, y - <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">0</span>][<span class="hljs-number">0</span>])<br>        output_pixel = output_pixel + (i[x, y - <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">0</span>][<span class="hljs-number">1</span>])<br>        output_pixel = output_pixel + (i[x + <span class="hljs-number">1</span>, y - <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">0</span>][<span class="hljs-number">2</span>])<br>        output_pixel = output_pixel + (i[x - <span class="hljs-number">1</span>, y] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">1</span>][<span class="hljs-number">0</span>])<br>        output_pixel = output_pixel + (i[x, y] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">1</span>][<span class="hljs-number">1</span>])<br>        output_pixel = output_pixel + (i[x + <span class="hljs-number">1</span>, y] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">1</span>][<span class="hljs-number">2</span>])<br>        output_pixel = output_pixel + (i[x - <span class="hljs-number">1</span>, y + <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">2</span>][<span class="hljs-number">0</span>])<br>        output_pixel = output_pixel + (i[x, y + <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">2</span>][<span class="hljs-number">1</span>])<br>        output_pixel = output_pixel + (i[x + <span class="hljs-number">1</span>, y + <span class="hljs-number">1</span>] * <span class="hljs-built_in">filter</span>[<span class="hljs-number">2</span>][<span class="hljs-number">2</span>])<br>        output_pixel = output_pixel * weight<br>        <span class="hljs-keyword">if</span> output_pixel &lt; <span class="hljs-number">0</span>:<br>            output_pixel = <span class="hljs-number">0</span><br>        <span class="hljs-keyword">if</span> output_pixel &gt; <span class="hljs-number">255</span>:<br>            output_pixel = <span class="hljs-number">255</span><br>        i_transformed[x, y] = output_pixel<br></code></pre></td></tr></table></figure>
 
-<h2 id="5-查看返回的结果"><a href="#5-查看返回的结果" class="headerlink" title="5. 查看返回的结果"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#4">5. 查看返回的结果</a></h2><p>现在，绘制图像，查看通过过滤条件的效果：</p>
-<figure class="highlight scss"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs scss"># Plot the image. Note the size of the axes -- they are <span class="hljs-number">512</span> by <span class="hljs-number">512</span>plt<span class="hljs-selector-class">.gray</span>()plt<span class="hljs-selector-class">.grid</span>(False)plt<span class="hljs-selector-class">.imshow</span>(i_transformed)<span class="hljs-selector-id">#plt</span><span class="hljs-selector-class">.axis</span>(&#x27;off&#x27;)plt<span class="hljs-selector-class">.show</span>()<br></code></pre></td></tr></table></figure>
+<h2 id="查看返回的结果"><a href="#查看返回的结果" class="headerlink" title="查看返回的结果"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#4">查看返回的结果</a></h2><p>现在，绘制图像，查看通过过滤条件的效果：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-comment"># Plot the image. Note the size of the axes -- they are 512 by 512</span><br>plt.gray()<br>plt.grid(<span class="hljs-literal">False</span>)<br>plt.imshow(i_transformed)<br><span class="hljs-comment">#plt.axis(&#x27;off&#x27;)</span><br>plt.show()<br></code></pre></td></tr></table></figure>
 
 <p><img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/48ff667b2df812ad.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="48ff667b2df812ad.png"></p>
 <p>请考虑以下过滤条件值及其对图像的影响。</p>
@@ -326,16 +340,20 @@
 <p>使用 [-1,-2,-1,0,0,0,1,2,1] 获得水平线：</p>
 <p><img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/705ec1004fce21d4.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="水平线检测"></p>
 <p>探索不同的值！此外，您还可以尝试其他尺寸的过滤条件，例如 5x5 或 7x7。</p>
-<h2 id="6-了解池化"><a href="#6-了解池化" class="headerlink" title="6. 了解池化"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#5">6. 了解池化</a></h2><p>现在，您已确定了图像的基本特征，接下来要做什么？如何使用生成的特征图对图像进行分类？</p>
+<h2 id="了解池化"><a href="#了解池化" class="headerlink" title="了解池化"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#5">了解池化</a></h2><p>现在，您已确定了图像的基本特征，接下来要做什么？如何使用生成的特征图对图像进行分类？</p>
 <p>与卷积类似，池化对特征检测有很大帮助。池化层可减少图像中的所有信息量，同时维持检测到的特征。</p>
 <p>池化类型有多种，但您可以使用名为“最大池化”的池化类型。</p>
 <p>迭代图片，并在每个点上考虑像素及其右侧、下方和右下方直接邻近像素。取其中最大的（即最大池化），并将其加载到新图像中。因此，新图像的大小将是旧图像的四分之一。<img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/6029904d82700d8e.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="最大池化"></p>
-<h2 id="7-编写池化代码"><a href="#7-编写池化代码" class="headerlink" title="7. 编写池化代码"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#6">7. 编写池化代码</a></h2><p>以下代码将显示 (2, 2) 池化。运行该代码以查看输出。</p>
+<h2 id="编写池化代码"><a href="#编写池化代码" class="headerlink" title="编写池化代码"></a><a target="_blank" rel="noopener" href="https://developers.google.com/codelabs/tensorflow-3-convolutions?hl=zh-cn#6">编写池化代码</a></h2><p>以下代码将显示 (2, 2) 池化。运行该代码以查看输出。</p>
 <p>您会发现，虽然此图像大小是原始大小的四分之一，但保留了所有特征。</p>
-<figure class="highlight processing"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs processing">new_x = <span class="hljs-built_in">int</span>(size_x/<span class="hljs-number">2</span>)new_y = <span class="hljs-built_in">int</span>(size_y/<span class="hljs-number">2</span>)newImage = np.<span class="hljs-property">zeros</span>((new_x, new_y))<span class="hljs-keyword">for</span> x in <span class="hljs-title function_">range</span>(<span class="hljs-number">0</span>, size_x, <span class="hljs-number">2</span>):  <span class="hljs-keyword">for</span> y in <span class="hljs-title function_">range</span>(<span class="hljs-number">0</span>, size_y, <span class="hljs-number">2</span>):    <span class="hljs-built_in">pixels</span> = []    <span class="hljs-built_in">pixels</span>.<span class="hljs-property">append</span>(i_transformed[x, y])    <span class="hljs-built_in">pixels</span>.<span class="hljs-property">append</span>(i_transformed[x+<span class="hljs-number">1</span>, y])    <span class="hljs-built_in">pixels</span>.<span class="hljs-property">append</span>(i_transformed[x, y+<span class="hljs-number">1</span>])    <span class="hljs-built_in">pixels</span>.<span class="hljs-property">append</span>(i_transformed[x+<span class="hljs-number">1</span>, y+<span class="hljs-number">1</span>])    <span class="hljs-built_in">pixels</span>.<span class="hljs-property">sort</span>(<span class="hljs-built_in">reverse</span>=True)    newImage[<span class="hljs-built_in">int</span>(x/<span class="hljs-number">2</span>),<span class="hljs-built_in">int</span>(y/<span class="hljs-number">2</span>)] = <span class="hljs-built_in">pixels</span>[<span class="hljs-number">0</span>]# Plot the <span class="hljs-built_in">image</span>. Note the <span class="hljs-built_in">size</span> of the axes -- now <span class="hljs-number">256</span> <span class="hljs-built_in">pixels</span> instead of <span class="hljs-number">512</span>plt.<span class="hljs-property">gray</span>()plt.<span class="hljs-property">grid</span>(False)plt.<span class="hljs-property">imshow</span>(newImage)#plt.<span class="hljs-property">axis</span>(<span class="hljs-string">&#x27;off&#x27;</span>)plt.<span class="hljs-property">show</span>()<br></code></pre></td></tr></table></figure>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs python">new_x = <span class="hljs-built_in">int</span>(size_x / <span class="hljs-number">2</span>)<br>new_y = <span class="hljs-built_in">int</span>(size_y / <span class="hljs-number">2</span>)<br>newImage = np.zeros((new_x, new_y))<br><span class="hljs-keyword">for</span> x <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0</span>, size_x, <span class="hljs-number">2</span>):<br>    <span class="hljs-keyword">for</span> y <span class="hljs-keyword">in</span> <span class="hljs-built_in">range</span>(<span class="hljs-number">0</span>, size_y, <span class="hljs-number">2</span>):<br>        pixels = []<br>        pixels.append(i_transformed[x, y])<br>        pixels.append(i_transformed[x + <span class="hljs-number">1</span>, y])<br>        pixels.append(i_transformed[x, y + <span class="hljs-number">1</span>])<br>        pixels.append(i_transformed[x + <span class="hljs-number">1</span>, y + <span class="hljs-number">1</span>])<br>        pixels.sort(reverse=<span class="hljs-literal">True</span>)<br>        newImage[<span class="hljs-built_in">int</span>(x / <span class="hljs-number">2</span>), <span class="hljs-built_in">int</span>(y / <span class="hljs-number">2</span>)] = pixels[<span class="hljs-number">0</span>]<br><br><span class="hljs-comment"># Plot the image. Note the size of the axes -- now 256 pixels instead of 512</span><br>plt.gray()<br>plt.grid(<span class="hljs-literal">False</span>)<br>plt.imshow(newImage)<br><span class="hljs-comment"># plt.axis(&#x27;off&#x27;)</span><br>plt.show()<br></code></pre></td></tr></table></figure>
 
 <p><img src="https://developers.google.com/static/codelabs/tensorflow-3-convolutions/img/1f5ebdafd1db2595.png?hl=zh-cn" srcset="/img/loading.gif" lazyload alt="1f5ebdafd1db2595.png"></p>
 <p>请注意该图表的轴。图像现在的尺寸为 256x256，是原始尺寸的四分之一，尽管现在图像中显示的数据较少，但检测到的特征也得到了增强。</p>
+<h2 id="快速傅立叶变换"><a href="#快速傅立叶变换" class="headerlink" title="快速傅立叶变换"></a>快速傅立叶变换</h2><p>快速傅里叶变换是一种将时域和空域中的数据转换到频域上去的算法。傅里叶变换用一些正弦和余弦波的和来表示原函数。你可以在下面看到一个信号（一个以时间为参数的有周期的函数通常称为信号）是如何被傅里叶变换的：<br><img src="https://pic4.zhimg.com/v2-45259486c87abae677e7f4f4bb89176b_b.webp" srcset="/img/loading.gif" lazyload></p>
+<p>红色是时域，蓝色为频域</p>
+<h2 id="三通道图片卷积操作"><a href="#三通道图片卷积操作" class="headerlink" title="三通道图片卷积操作"></a>三通道图片卷积操作</h2><p><img src="https://s2.51cto.com/images/blog/202302/15152631_63ec8927df6f311186.jpg?x-oss-process=image/watermark,size_16,text_QDUxQ1RP5Y2a5a6i,color_FFFFFF,t_30,g_se,x_10,y_10,shadow_20,type_ZmFuZ3poZW5naGVpdGk=/format,webp/resize,m_fixed,w_1184" srcset="/img/loading.gif" lazyload></p>
+<p>左列的X是输入的三通道图像即彩色图像，中间红色的两列是我们的kernel（即3x3的filter），共两个（即输出的feature通道为2）。最后一列为卷积之后的特征（由于2个kernel，输出通道为2）。<br>由上面的过程可以看出，输入是3维（hight<em>width</em>channel）的，kernel实际上也是三维的。</p>
 
                 
               </div>
@@ -425,6 +443,12 @@
                 <div class="post-prevnext my-3">
                   <article class="post-prev col-6">
                     
+                    
+                      <a href="/2023/12/06/Golang-pflag%E5%8C%85/" title="Golang: pflag包">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Golang: pflag包</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
                     
                   </article>
                   <article class="post-next col-6">
