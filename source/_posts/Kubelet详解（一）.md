@@ -1,5 +1,5 @@
 ---
-title: Kubelet详解（一）
+title: Kubelet详解（一）- Kubelet启动流程
 date: 2023-11-30 22:37:02
 tags:
 - kubernetes
