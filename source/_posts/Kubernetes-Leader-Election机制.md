@@ -246,3 +246,4 @@ func (le *LeaderElector) renew(ctx context.Context) {
 }
 ```
 renew 方法如果在任期内续期失败则会退出续期循环，主流程结束，其它candidate会尝试成为新的leader。旧的leader若想重新参与竞选，则需要再次调用`leaderelection.RunOrDie`, Kubernetes的组件一般直接退出，通过重启Pod实现重新参与选举。
+
