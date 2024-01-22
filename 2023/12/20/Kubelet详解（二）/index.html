@@ -1,0 +1,833 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png-fake">
+  <link rel="icon" href="/img/fluid.png-fake">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Chris Kery">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="本章节介绍一下Kubelet对Pod的同步流程。 相关概念Mirror Pod在浏览Kubelet的相关源码的时候，我们经常会看到如下的代码调用： 12345678GetPodByMirrorPod(*v1.Pod) (*v1.Pod, bool)&#x2F;&#x2F; GetMirrorPodByPod returns the mirror pod for the given static pod and&#x2F;&#x2F; w">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kubelet详解（二）- Pod同步流程">
+<meta property="og:url" content="https://chriskery.github.io/2023/12/20/Kubelet%E8%AF%A6%E8%A7%A3%EF%BC%88%E4%BA%8C%EF%BC%89/index.html">
+<meta property="og:site_name" content="Chriskery&#39;s Blog">
+<meta property="og:description" content="本章节介绍一下Kubelet对Pod的同步流程。 相关概念Mirror Pod在浏览Kubelet的相关源码的时候，我们经常会看到如下的代码调用： 12345678GetPodByMirrorPod(*v1.Pod) (*v1.Pod, bool)&#x2F;&#x2F; GetMirrorPodByPod returns the mirror pod for the given static pod and&#x2F;&#x2F; w">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2023-12-20T07:23:07.000Z">
+<meta property="article:modified_time" content="2024-01-22T14:00:29.666Z">
+<meta property="article:author" content="Chris Kery">
+<meta property="article:tag" content="kubernetes">
+<meta property="article:tag" content="kubelet">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+    <meta name="referrer" content="no-referrer-when-downgrade">
+  
+  
+  <title>Kubelet详解（二）- Pod同步流程 - Chriskery&#39;s Blog</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1749284_hj8rtnfg7um.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/font_1736178_lbnruvf0jn.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"chriskery.github.io","root":"/","version":"1.9.5","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"woyaola":null,"cnzz":null,"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 7.0.0"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 70vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>chriskery&#39;s blog</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/">
+                <i class="iconfont icon-home-fill"></i>
+                <span>首页</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/">
+                <i class="iconfont icon-category-fill"></i>
+                <span>分类</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>标签</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>归档</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" target="_blank" rel="noopener" href="https://github.com/chriskery">
+                <i class="iconfont icon-user-fill"></i>
+                <span>关于</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Kubelet详解（二）- Pod同步流程"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2023-12-20 15:23" pubdate>
+          2023年12月20日 下午
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          55k 字
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          456 分钟
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Kubelet详解（二）- Pod同步流程</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>本章节介绍一下Kubelet对Pod的同步流程。</p>
+<h2 id="相关概念"><a href="#相关概念" class="headerlink" title="相关概念"></a>相关概念</h2><h3 id="Mirror-Pod"><a href="#Mirror-Pod" class="headerlink" title="Mirror Pod"></a>Mirror Pod</h3><p>在浏览Kubelet的相关源码的时候，我们经常会看到如下的代码调用：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs golang">GetPodByMirrorPod(*v1.Pod) (*v1.Pod, <span class="hljs-type">bool</span>)<br><span class="hljs-comment">// GetMirrorPodByPod returns the mirror pod for the given static pod and</span><br><span class="hljs-comment">// whether it was known to the pod manager.</span><br>GetMirrorPodByPod(*v1.Pod) (*v1.Pod, <span class="hljs-type">bool</span>)<br><span class="hljs-comment">// GetPodAndMirrorPod returns the complement for a pod - if a pod was provided</span><br><span class="hljs-comment">// and a mirror pod can be found, return it. If a mirror pod is provided and</span><br><span class="hljs-comment">// the pod can be found, return it and true for wasMirror.</span><br>GetPodAndMirrorPod(*v1.Pod) (pod, mirrorPod *v1.Pod, wasMirror <span class="hljs-type">bool</span>)<br></code></pre></td></tr></table></figure>
+<p>这里面的<strong>mirror pod</strong>很容易让人一头雾水。在介绍<strong>mirror pod</strong>之前，我们首先需要知道Kubelet所监听的Pods的来源，主要分为三种：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-comment">// define file config source</span><br>	<span class="hljs-keyword">if</span> kubeCfg.StaticPodPath != <span class="hljs-string">&quot;&quot;</span> &#123;<br>		klog.InfoS(<span class="hljs-string">&quot;Adding static pod path&quot;</span>, <span class="hljs-string">&quot;path&quot;</span>, kubeCfg.StaticPodPath)<br>		config.NewSourceFile(kubeCfg.StaticPodPath, nodeName, kubeCfg.FileCheckFrequency.Duration, cfg.Channel(ctx, kubetypes.FileSource))<br>	&#125;<br><br>	<span class="hljs-comment">// define url config source</span><br>	<span class="hljs-keyword">if</span> kubeCfg.StaticPodURL != <span class="hljs-string">&quot;&quot;</span> &#123;<br>		klog.InfoS(<span class="hljs-string">&quot;Adding pod URL with HTTP header&quot;</span>, <span class="hljs-string">&quot;URL&quot;</span>, kubeCfg.StaticPodURL, <span class="hljs-string">&quot;header&quot;</span>, manifestURLHeader)<br>		config.NewSourceURL(kubeCfg.StaticPodURL, manifestURLHeader, nodeName, kubeCfg.HTTPCheckFrequency.Duration, cfg.Channel(ctx, kubetypes.HTTPSource))<br>	&#125;<br><br>	<span class="hljs-keyword">if</span> kubeDeps.KubeClient != <span class="hljs-literal">nil</span> &#123;<br>		klog.InfoS(<span class="hljs-string">&quot;Adding apiserver pod source&quot;</span>)<br>		config.NewSourceApiserver(kubeDeps.KubeClient, nodeName, nodeHasSynced, cfg.Channel(ctx, kubetypes.ApiserverSource))<br>	&#125;<br></code></pre></td></tr></table></figure>
+
+<p>Kubelet启动后，会负责所有调度到对应机器上的Pod的生命周期管理，获取Pod清单列表的方式包括：</p>
+<ul>
+<li>文件∶启动参数–config指定的配置目录下的文件（默认&#x2F;etc&#x2F;Kubernetes&#x2F;manifests&#x2F;）。</li>
+<li>HTTP endpoint（URL）∶启动参数–manifest-url设置。</li>
+<li>APIServer∶通过APIServer监听etcd目录，同步Pod清单。</li>
+<li>HTTP Server∶ kubelet 侦听 HTTP 请求，并响应简单的 API 以提交新的 Pod 清单</li>
+</ul>
+<p>其中所有来自<code>APIServer</code>的Pod为非静态Pod，其余来源的Pod称之为<code>静态Pod</code>。静态 Pod 不通过 master 节点上的 apiserver 操作及管理，直接由特定节点上的 kubelet 进程来管理的。无法与我们常用的控制器 Deployment 或者 DaemonSet 等进行关联，它由 kubelet 进程自己来监控，当 pod 崩溃时重启该 pod。静态 pod 始终绑定在某个 kubelet ，并且始终运行在同一个节点上。</p>
+<p>为了让这些不是由API Server管理的Pods也能在Kubernetes API中表示和监控，kubelet 会自动为每一个静态 pod 在 kubernetes 的 apiserver 上创建一个镜像 pod，也就是<code>mirror pod</code>。注意，镜像Pod是一个只读的资源，在API server上不能对其进行修改或删除</p>
+<h3 id="syncLoopIteration"><a href="#syncLoopIteration" class="headerlink" title="syncLoopIteration"></a>syncLoopIteration</h3><p>Kubelet的<code>syncLoopIteration</code>功能是Kubernetes节点代理kubelet内部的一个核心循环，负责同步节点上的Pod状态。在这个循环中，kubelet会执行一系列动作来确保节点上的Pods状态与其期望的状态一致。</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> syncLoopIteration(ctx context.Context, configCh &lt;-<span class="hljs-keyword">chan</span> kubetypes.PodUpdate, handler SyncHandler, syncCh &lt;-<span class="hljs-keyword">chan</span> time.Time, housekeepingCh &lt;-<span class="hljs-keyword">chan</span> time.Time, plegCh &lt;-<span class="hljs-keyword">chan</span> *pleg.PodLifecycleEvent) <span class="hljs-type">bool</span><br></code></pre></td></tr></table></figure>
+
+<p><code>syncLoopIteration</code>参数为各个事件源的channel，其具体含义为：</p>
+<ul>
+<li><p>configCh &lt;-chan kubetypes.PodUpdate: 这是一个Go channel，kubelet通过它接收Pod更新信息。kubetypes.PodUpdate是一个结构体，包含了Pods的更新信息，例如Pod的创建、更新、删除事件。</p>
+</li>
+<li><p>handler SyncHandler: SyncHandler是一个接口，它定义了处理Pod同步的一系列方法。syncLoopIteration函数会调用SyncHandler的方法来同步Pod的状态，比如启动新的Pod、更新现有的Pod、或者停止不再需要的Pod。</p>
+</li>
+<li><p>syncCh &lt;-chan time.Time: 这是一个定时器channel，kubelet使用它来定期执行同步操作。当这个channel发出信号时，它触发kubelet去检查和更新Pod的状态。</p>
+</li>
+<li><p>housekeepingCh &lt;-chan time.Time: 这个也是一个定时器channel，但它专门用于触发常规的节点维护任务，如垃圾收集、状态更新等。</p>
+</li>
+<li><p>plegCh &lt;-chan *pleg.PodLifecycleEvent: plegCh是Pod生命周期事件生成器（PLEG）的channel。PLEG负责检测容器的状态变化，并生成相应的事件。kubelet监听这个channel来获取容器状态变化的通知，并根据这些变化来更新Pod的状态。</p>
+</li>
+</ul>
+<h2 id="configCh"><a href="#configCh" class="headerlink" title="configCh"></a>configCh</h2><p>针对<code>configCh</code>传递过来的Pod的更新事件，其响应如下：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-keyword">case</span> u, open := &lt;-configCh:<br>	<span class="hljs-comment">// Update from a config source; dispatch it to the right handler</span><br>	<span class="hljs-comment">// callback.</span><br>	<span class="hljs-keyword">if</span> !open &#123;<br>		klog.ErrorS(<span class="hljs-literal">nil</span>, <span class="hljs-string">&quot;Update channel is closed, exiting the sync loop&quot;</span>)<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span><br>	&#125;<br><br>	<span class="hljs-keyword">switch</span> u.Op &#123;<br>	<span class="hljs-keyword">case</span> kubetypes.ADD:<br>		klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;SyncLoop ADD&quot;</span>, <span class="hljs-string">&quot;source&quot;</span>, u.Source, <span class="hljs-string">&quot;pods&quot;</span>, klog.KObjSlice(u.Pods))<br>		<span class="hljs-comment">// After restarting, kubelet will get all existing pods through</span><br>		<span class="hljs-comment">// ADD as if they are new pods. These pods will then go through the</span><br>		<span class="hljs-comment">// admission process and *may* be rejected. This can be resolved</span><br>		<span class="hljs-comment">// once we have checkpointing.</span><br>		handler.HandlePodAdditions(u.Pods)<br>	<span class="hljs-keyword">case</span> kubetypes.UPDATE:<br>		klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;SyncLoop UPDATE&quot;</span>, <span class="hljs-string">&quot;source&quot;</span>, u.Source, <span class="hljs-string">&quot;pods&quot;</span>, klog.KObjSlice(u.Pods))<br>		handler.HandlePodUpdates(u.Pods)<br>	<span class="hljs-keyword">case</span> kubetypes.REMOVE:<br>		klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;SyncLoop REMOVE&quot;</span>, <span class="hljs-string">&quot;source&quot;</span>, u.Source, <span class="hljs-string">&quot;pods&quot;</span>, klog.KObjSlice(u.Pods))<br>		handler.HandlePodRemoves(u.Pods)<br>	<span class="hljs-keyword">case</span> kubetypes.RECONCILE:<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncLoop RECONCILE&quot;</span>, <span class="hljs-string">&quot;source&quot;</span>, u.Source, <span class="hljs-string">&quot;pods&quot;</span>, klog.KObjSlice(u.Pods))<br>		handler.HandlePodReconcile(u.Pods)<br>	<span class="hljs-keyword">case</span> kubetypes.DELETE:<br>		klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;SyncLoop DELETE&quot;</span>, <span class="hljs-string">&quot;source&quot;</span>, u.Source, <span class="hljs-string">&quot;pods&quot;</span>, klog.KObjSlice(u.Pods))<br>		<span class="hljs-comment">// DELETE is treated as a UPDATE because of graceful deletion.</span><br>		handler.HandlePodUpdates(u.Pods)<br>	<span class="hljs-keyword">case</span> kubetypes.SET:<br>		<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> Do we want to support this?</span><br>		klog.ErrorS(<span class="hljs-literal">nil</span>, <span class="hljs-string">&quot;Kubelet does not support snapshot update&quot;</span>)<br>	<span class="hljs-keyword">default</span>:<br>		klog.ErrorS(<span class="hljs-literal">nil</span>, <span class="hljs-string">&quot;Invalid operation type received&quot;</span>, <span class="hljs-string">&quot;operation&quot;</span>, u.Op)<br>	&#125;<br><br>	kl.sourcesReady.AddSource(u.Source)<br><br></code></pre></td></tr></table></figure>
+
+<p>kubelet 将Pod的操作类型分为<code>kubetypes.ADD、kubetypes.UPDATE、kubetypes.REMOVE 、kubetypes.RECONCILE、kubetypes.DELETE、kubetypes.SE</code>，并根据事件的类型调用handler的对应接口进行处理。</p>
+<h3 id="handler-HandlePodAdditions-u-Pods"><a href="#handler-HandlePodAdditions-u-Pods" class="headerlink" title="handler.HandlePodAdditions(u.Pods)"></a>handler.HandlePodAdditions(u.Pods)</h3><p>其函数实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-comment">// HandlePodAdditions is the callback in SyncHandler for pods being added from</span><br><span class="hljs-comment">// a config source.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> HandlePodAdditions(pods []*v1.Pod) &#123;<br>	start := kl.clock.Now()<br>	sort.Sort(sliceutils.PodsByCreationTime(pods))<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> pods &#123;<br>		existingPods := kl.podManager.GetPods()<br>		<span class="hljs-comment">// Always add the pod to the pod manager. Kubelet relies on the pod</span><br>		<span class="hljs-comment">// manager as the source of truth for the desired state. If a pod does</span><br>		<span class="hljs-comment">// not exist in the pod manager, it means that it has been deleted in</span><br>		<span class="hljs-comment">// the apiserver and no action (other than cleanup) is required.</span><br>		kl.podManager.AddPod(pod)<br><br>		pod, mirrorPod, wasMirror := kl.podManager.GetPodAndMirrorPod(pod)<br>		<span class="hljs-keyword">if</span> wasMirror &#123;<br>			<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>				klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Unable to find pod for mirror pod, skipping&quot;</span>, <span class="hljs-string">&quot;mirrorPod&quot;</span>, klog.KObj(mirrorPod), <span class="hljs-string">&quot;mirrorPodUID&quot;</span>, mirrorPod.UID)<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			kl.podWorkers.UpdatePod(UpdatePodOptions&#123;<br>				Pod:        pod,<br>				MirrorPod:  mirrorPod,<br>				UpdateType: kubetypes.SyncPodUpdate,<br>				StartTime:  start,<br>			&#125;)<br>			<span class="hljs-keyword">continue</span><br>		&#125;<br><br>		<span class="hljs-comment">// Only go through the admission process if the pod is not requested</span><br>		<span class="hljs-comment">// for termination by another part of the kubelet. If the pod is already</span><br>		<span class="hljs-comment">// using resources (previously admitted), the pod worker is going to be</span><br>		<span class="hljs-comment">// shutting it down. If the pod hasn&#x27;t started yet, we know that when</span><br>		<span class="hljs-comment">// the pod worker is invoked it will also avoid setting up the pod, so</span><br>		<span class="hljs-comment">// we simply avoid doing any work.</span><br>		<span class="hljs-keyword">if</span> !kl.podWorkers.IsPodTerminationRequested(pod.UID) &#123;<br>			<span class="hljs-comment">// We failed pods that we rejected, so activePods include all admitted</span><br>			<span class="hljs-comment">// pods that are alive.</span><br>			activePods := kl.filterOutInactivePods(existingPods)<br><br>			<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) &#123;&#125; <span class="hljs-keyword">else</span> &#123;<br>				<span class="hljs-comment">// Check if we can admit the pod; if not, reject it.</span><br>				<span class="hljs-keyword">if</span> ok, reason, message := kl.canAdmitPod(activePods, pod); !ok &#123;<br>					kl.rejectPod(pod, reason, message)<br>					<span class="hljs-keyword">continue</span><br>				&#125;<br>			&#125;<br>		&#125;<br>		kl.podWorkers.UpdatePod(UpdatePodOptions&#123;<br>			Pod:        pod,<br>			MirrorPod:  mirrorPod,<br>			UpdateType: kubetypes.SyncPodCreate,<br>			StartTime:  start,<br>		&#125;)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<ol>
+<li>将待添加的pods按照创建时间进行排序</li>
+<li>依次遍历每个Pod</li>
+<li>获取<code>podManager</code>已经存在的pod，podManager缓存了该Kubelet所有已经<code>admitted</code>的pods和mirror pods</li>
+<li>将新的Pod添加到<code>podManager</code>中</li>
+<li>调用<code>podManager</code>获取到缓存里该Pod对应的pod和mirror pod，并判断是否是<code>mirror pod</code>，调用<code>kl.podWorkers.UpdatePod</code>传递更新事件。</li>
+<li>判断是否Pod的<code>Termination</code>请求，是的话调用<code>kl.podWorkers.UpdatePod</code>传递更新事件，否则检查是否应该Admit该Pod（资源限制、节点匹配、xxxx），然后再调用<code>kl.podWorkers.UpdatePod</code>。</li>
+<li>无论是 MirrorPod 还是正常 Pod ，最终都是调用 <code>kl.podWorkers.UpdatePod</code> 接口进行处理，他们的区别在于传进去的参数的不同。MirrorPod所有的&#x3D;操作类型都被当做 UPDATE 来处理，更新它在 apiserver 上的状态。</li>
+</ol>
+<h3 id="handler-HandlePodUpdates-u-Pods"><a href="#handler-HandlePodUpdates-u-Pods" class="headerlink" title="handler.HandlePodUpdates(u.Pods)"></a>handler.HandlePodUpdates(u.Pods)</h3><p>其实现如下：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><code class="hljs golang"><br><span class="hljs-comment">// HandlePodUpdates is the callback in the SyncHandler interface for pods</span><br><span class="hljs-comment">// being updated from a config source.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> HandlePodUpdates(pods []*v1.Pod) &#123;<br>	start := kl.clock.Now()<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> pods &#123;<br>		kl.podManager.UpdatePod(pod)<br><br>		pod, mirrorPod, wasMirror := kl.podManager.GetPodAndMirrorPod(pod)<br>		<span class="hljs-keyword">if</span> wasMirror &#123;<br>			<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>				klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Unable to find pod for mirror pod, skipping&quot;</span>, <span class="hljs-string">&quot;mirrorPod&quot;</span>, klog.KObj(mirrorPod), <span class="hljs-string">&quot;mirrorPodUID&quot;</span>, mirrorPod.UID)<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>		&#125;<br><br>		kl.podWorkers.UpdatePod(UpdatePodOptions&#123;<br>			Pod:        pod,<br>			MirrorPod:  mirrorPod,<br>			UpdateType: kubetypes.SyncPodUpdate,<br>			StartTime:  start,<br>		&#125;)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>主要做了两件事：</p>
+<ol>
+<li>更新<code>podManager</code>里的缓存</li>
+<li>判断是否是MirrorPod，最终调用 <code>kl.podWorkers.UpdatePod</code> 接口进行处理。</li>
+</ol>
+<h3 id="handler-HandlePodRemoves-u-Pods"><a href="#handler-HandlePodRemoves-u-Pods" class="headerlink" title="handler.HandlePodRemoves(u.Pods)"></a>handler.HandlePodRemoves(u.Pods)</h3><p>其具体实现如下：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs golang"><br><span class="hljs-comment">// HandlePodRemoves is the callback in the SyncHandler interface for pods</span><br><span class="hljs-comment">// being removed from a config source.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> HandlePodRemoves(pods []*v1.Pod) &#123;<br>	start := kl.clock.Now()<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> pods &#123;<br>		kl.podManager.RemovePod(pod)<br><br>		pod, mirrorPod, wasMirror := kl.podManager.GetPodAndMirrorPod(pod)<br>		<span class="hljs-keyword">if</span> wasMirror &#123;<br>			<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>				klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Unable to find pod for mirror pod, skipping&quot;</span>, <span class="hljs-string">&quot;mirrorPod&quot;</span>, klog.KObj(mirrorPod), <span class="hljs-string">&quot;mirrorPodUID&quot;</span>, mirrorPod.UID)<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			kl.podWorkers.UpdatePod(UpdatePodOptions&#123;<br>				Pod:        pod,<br>				MirrorPod:  mirrorPod,<br>				UpdateType: kubetypes.SyncPodUpdate,<br>				StartTime:  start,<br>			&#125;)<br>			<span class="hljs-keyword">continue</span><br>		&#125;<br><br>		<span class="hljs-comment">// Deletion is allowed to fail because the periodic cleanup routine</span><br>		<span class="hljs-comment">// will trigger deletion again.</span><br>		<span class="hljs-keyword">if</span> err := kl.deletePod(pod); err != <span class="hljs-literal">nil</span> &#123;<br>			klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Failed to delete pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;err&quot;</span>, err)<br>		&#125;<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>跟<code>HandlePodUpdates</code>实现差不多，只不过在最后调用<code>kl.deletePod(pod)</code>从Kubelet内部的状态里删除对应的Pod，其内部分为两个步骤：</p>
+<ol>
+<li>异步停止所有相关联的pod worker</li>
+<li>给<code>podKillingCh</code>发送signal通知pod进行kill的过程</li>
+</ol>
+<h3 id="handler-HandlePodRemoves-u-Pods-1"><a href="#handler-HandlePodRemoves-u-Pods-1" class="headerlink" title="handler.HandlePodRemoves(u.Pods)"></a>handler.HandlePodRemoves(u.Pods)</h3><p>其具体实现如下：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> HandlePodReconcile(pods []*v1.Pod) &#123;<br>	start := kl.clock.Now()<br>	<span class="hljs-keyword">for</span> _, pod := <span class="hljs-keyword">range</span> pods &#123;<br>		<span class="hljs-comment">// Update the pod in pod manager, status manager will do periodically reconcile according</span><br>		<span class="hljs-comment">// to the pod manager.</span><br>		kl.podManager.UpdatePod(pod)<br><br>		pod, mirrorPod, wasMirror := kl.podManager.GetPodAndMirrorPod(pod)<br>		<span class="hljs-keyword">if</span> wasMirror &#123;<br>			<span class="hljs-keyword">if</span> pod == <span class="hljs-literal">nil</span> &#123;<br>				klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Unable to find pod for mirror pod, skipping&quot;</span>, <span class="hljs-string">&quot;mirrorPod&quot;</span>, klog.KObj(mirrorPod), <span class="hljs-string">&quot;mirrorPodUID&quot;</span>, mirrorPod.UID)<br>				<span class="hljs-keyword">continue</span><br>			&#125;<br>			<span class="hljs-comment">// Static pods should be reconciled the same way as regular pods</span><br>		&#125;<br><br><br>		<span class="hljs-keyword">if</span> status.NeedToReconcilePodReadiness(pod) &#123;<br>			kl.podWorkers.UpdatePod(UpdatePodOptions&#123;<br>				Pod:        pod,<br>				MirrorPod:  mirrorPod,<br>				UpdateType: kubetypes.SyncPodSync,<br>				StartTime:  start,<br>			&#125;)<br>		&#125;<br><br><br>		<span class="hljs-keyword">if</span> eviction.PodIsEvicted(pod.Status) &#123;<br>			<span class="hljs-keyword">if</span> podStatus, err := kl.podCache.Get(pod.UID); err == <span class="hljs-literal">nil</span> &#123;<br>				kl.containerDeletor.deleteContainersInPod(<span class="hljs-string">&quot;&quot;</span>, podStatus, <span class="hljs-literal">true</span>)<br>			&#125;<br>		&#125;<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>handler.HandlePodReconcile() 分 3 步走，先将 pod 状态更新到缓存中，然后判断 pod 状态是否需要重新reconcile ，则调用 <code>kl.podWorkers.UpdatePod</code> 完成同步，如果是被驱逐的，则删掉该Pod的所有容器。</p>
+<h2 id="kl-podWorkers-UpdatePod"><a href="#kl-podWorkers-UpdatePod" class="headerlink" title="kl.podWorkers.UpdatePod"></a>kl.podWorkers.UpdatePod</h2><p><code>kl.podWorkers.UpdatePod</code>处理pod的配置变化和pod的<code>termination</code>状态，其具体实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br><span class="line">206</span><br><span class="line">207</span><br><span class="line">208</span><br><span class="line">209</span><br><span class="line">210</span><br><span class="line">211</span><br><span class="line">212</span><br><span class="line">213</span><br><span class="line">214</span><br><span class="line">215</span><br><span class="line">216</span><br><span class="line">217</span><br><span class="line">218</span><br><span class="line">219</span><br><span class="line">220</span><br><span class="line">221</span><br><span class="line">222</span><br><span class="line">223</span><br><span class="line">224</span><br><span class="line">225</span><br><span class="line">226</span><br><span class="line">227</span><br><span class="line">228</span><br><span class="line">229</span><br><span class="line">230</span><br><span class="line">231</span><br><span class="line">232</span><br><span class="line">233</span><br><span class="line">234</span><br><span class="line">235</span><br><span class="line">236</span><br><span class="line">237</span><br><span class="line">238</span><br><span class="line">239</span><br><span class="line">240</span><br><span class="line">241</span><br><span class="line">242</span><br><span class="line">243</span><br><span class="line">244</span><br><span class="line">245</span><br></pre></td><td class="code"><pre><code class="hljs golang"><br><span class="hljs-comment">// UpdatePod carries a configuration change or termination state to a pod. A pod is either runnable,</span><br><span class="hljs-comment">// terminating, or terminated, and will transition to terminating if: deleted on the apiserver,</span><br><span class="hljs-comment">// discovered to have a terminal phase (Succeeded or Failed), or evicted by the kubelet.</span><br><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> UpdatePod(options UpdatePodOptions) &#123;<br>	<span class="hljs-comment">// Handle when the pod is an orphan (no config) and we only have runtime status by running only</span><br>	<span class="hljs-comment">// the terminating part of the lifecycle. A running pod contains only a minimal set of information</span><br>	<span class="hljs-comment">// about the pod</span><br>	<span class="hljs-keyword">var</span> isRuntimePod <span class="hljs-type">bool</span><br>	<span class="hljs-keyword">var</span> uid types.UID<br>	<span class="hljs-keyword">var</span> name, ns <span class="hljs-type">string</span><br>	<span class="hljs-keyword">if</span> runningPod := options.RunningPod; runningPod != <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">if</span> options.Pod == <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-comment">// the sythetic pod created here is used only as a placeholder and not tracked</span><br>			<span class="hljs-keyword">if</span> options.UpdateType != kubetypes.SyncPodKill &#123;<br>				klog.InfoS(<span class="hljs-string">&quot;Pod update is ignored, runtime pods can only be killed&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(runningPod.Namespace, runningPod.Name), <span class="hljs-string">&quot;podUID&quot;</span>, runningPod.ID, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>				<span class="hljs-keyword">return</span><br>			&#125;<br>			uid, ns, name = runningPod.ID, runningPod.Namespace, runningPod.Name<br>			isRuntimePod = <span class="hljs-literal">true</span><br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			options.RunningPod = <span class="hljs-literal">nil</span><br>			uid, ns, name = options.Pod.UID, options.Pod.Namespace, options.Pod.Name<br>			klog.InfoS(<span class="hljs-string">&quot;Pod update included RunningPod which is only valid when Pod is not specified&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>		&#125;<br>	&#125; <span class="hljs-keyword">else</span> &#123;<br>		uid, ns, name = options.Pod.UID, options.Pod.Namespace, options.Pod.Name<br>	&#125;<br><br>	p.podLock.Lock()<br>	<span class="hljs-keyword">defer</span> p.podLock.Unlock()<br><br>	<span class="hljs-comment">// decide what to do with this pod - we are either setting it up, tearing it down, or ignoring it</span><br>	<span class="hljs-keyword">var</span> firstTime <span class="hljs-type">bool</span><br>	now := p.clock.Now()<br>	status, ok := p.podSyncStatuses[uid]<br>	<span class="hljs-keyword">if</span> !ok &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is being synced for the first time&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>		firstTime = <span class="hljs-literal">true</span><br>		status = &amp;podSyncStatus&#123;<br>			syncedAt: now,<br>			fullname: kubecontainer.BuildPodFullName(name, ns),<br>		&#125;<br>		<span class="hljs-comment">// if this pod is being synced for the first time, we need to make sure it is an active pod</span><br>		<span class="hljs-keyword">if</span> options.Pod != <span class="hljs-literal">nil</span> &amp;&amp; (options.Pod.Status.Phase == v1.PodFailed || options.Pod.Status.Phase == v1.PodSucceeded) &#123;<br>			<span class="hljs-comment">// Check to see if the pod is not running and the pod is terminal; if this succeeds then record in the podWorker that it is terminated.</span><br>			<span class="hljs-comment">// This is needed because after a kubelet restart, we need to ensure terminal pods will NOT be considered active in Pod Admission. See http://issues.k8s.io/105523</span><br>			<span class="hljs-comment">// However, `filterOutInactivePods`, considers pods that are actively terminating as active. As a result, `IsPodKnownTerminated()` needs to return true and thus `terminatedAt` needs to be set.</span><br>			<span class="hljs-keyword">if</span> statusCache, err := p.podCache.Get(uid); err == <span class="hljs-literal">nil</span> &#123;<br>				<span class="hljs-keyword">if</span> isPodStatusCacheTerminal(statusCache) &#123;<br>					<span class="hljs-comment">// At this point we know:</span><br>					<span class="hljs-comment">// (1) The pod is terminal based on the config source.</span><br>					<span class="hljs-comment">// (2) The pod is terminal based on the runtime cache.</span><br>					<span class="hljs-comment">// This implies that this pod had already completed `SyncTerminatingPod` sometime in the past. The pod is likely being synced for the first time due to a kubelet restart.</span><br>					<span class="hljs-comment">// These pods need to complete SyncTerminatedPod to ensure that all resources are cleaned and that the status manager makes the final status updates for the pod.</span><br>					<span class="hljs-comment">// As a result, set finished: false, to ensure a Terminated event will be sent and `SyncTerminatedPod` will run.</span><br>					status = &amp;podSyncStatus&#123;<br>						terminatedAt:       now,<br>						terminatingAt:      now,<br>						syncedAt:           now,<br>						startedTerminating: <span class="hljs-literal">true</span>,<br>						finished:           <span class="hljs-literal">false</span>,<br>						fullname:           kubecontainer.BuildPodFullName(name, ns),<br>					&#125;<br>				&#125;<br>			&#125;<br>		&#125;<br>		p.podSyncStatuses[uid] = status<br>	&#125;<br><br>	<span class="hljs-comment">// RunningPods represent an unknown pod execution and don&#x27;t contain pod spec information</span><br>	<span class="hljs-comment">// sufficient to perform any action other than termination. If we received a RunningPod</span><br>	<span class="hljs-comment">// after a real pod has already been provided, use the most recent spec instead. Also,</span><br>	<span class="hljs-comment">// once we observe a runtime pod we must drive it to completion, even if we weren&#x27;t the</span><br>	<span class="hljs-comment">// ones who started it.</span><br>	pod := options.Pod<br>	<span class="hljs-keyword">if</span> isRuntimePod &#123;<br>		status.observedRuntime = <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">switch</span> &#123;<br>		<span class="hljs-keyword">case</span> status.pendingUpdate != <span class="hljs-literal">nil</span> &amp;&amp; status.pendingUpdate.Pod != <span class="hljs-literal">nil</span>:<br>			pod = status.pendingUpdate.Pod<br>			options.Pod = pod<br>			options.RunningPod = <span class="hljs-literal">nil</span><br>		<span class="hljs-keyword">case</span> status.activeUpdate != <span class="hljs-literal">nil</span> &amp;&amp; status.activeUpdate.Pod != <span class="hljs-literal">nil</span>:<br>			pod = status.activeUpdate.Pod<br>			options.Pod = pod<br>			options.RunningPod = <span class="hljs-literal">nil</span><br>		<span class="hljs-keyword">default</span>:<br>			<span class="hljs-comment">// we will continue to use RunningPod.ToAPIPod() as pod here, but</span><br>			<span class="hljs-comment">// options.Pod will be nil and other methods must handle that appropriately.</span><br>			pod = options.RunningPod.ToAPIPod()<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// When we see a create update on an already terminating pod, that implies two pods with the same UID were created in</span><br>	<span class="hljs-comment">// close temporal proximity (usually static pod but it&#x27;s possible for an apiserver to extremely rarely do something</span><br>	<span class="hljs-comment">// similar) - flag the sync status to indicate that after the pod terminates it should be reset to &quot;not running&quot; to</span><br>	<span class="hljs-comment">// allow a subsequent add/update to start the pod worker again. This does not apply to the first time we see a pod,</span><br>	<span class="hljs-comment">// such as when the kubelet restarts and we see already terminated pods for the first time.</span><br>	<span class="hljs-keyword">if</span> !firstTime &amp;&amp; status.IsTerminationRequested() &#123;<br>		<span class="hljs-keyword">if</span> options.UpdateType == kubetypes.SyncPodCreate &#123;<br>			status.restartRequested = <span class="hljs-literal">true</span><br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is terminating but has been requested to restart with same UID, will be reconciled later&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			<span class="hljs-keyword">return</span><br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// once a pod is terminated by UID, it cannot reenter the pod worker (until the UID is purged by housekeeping)</span><br>	<span class="hljs-keyword">if</span> status.IsFinished() &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is finished processing, no further updates&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>		<span class="hljs-keyword">return</span><br>	&#125;<br><br>	<span class="hljs-comment">// check for a transition to terminating</span><br>	<span class="hljs-keyword">var</span> becameTerminating <span class="hljs-type">bool</span><br>	<span class="hljs-keyword">if</span> !status.IsTerminationRequested() &#123;<br>		<span class="hljs-keyword">switch</span> &#123;<br>		<span class="hljs-keyword">case</span> isRuntimePod:<br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is orphaned and must be torn down&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			status.deleted = <span class="hljs-literal">true</span><br>			status.terminatingAt = now<br>			becameTerminating = <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">case</span> pod.DeletionTimestamp != <span class="hljs-literal">nil</span>:<br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is marked for graceful deletion, begin teardown&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			status.deleted = <span class="hljs-literal">true</span><br>			status.terminatingAt = now<br>			becameTerminating = <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">case</span> pod.Status.Phase == v1.PodFailed, pod.Status.Phase == v1.PodSucceeded:<br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is in a terminal phase (success/failed), begin teardown&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			status.terminatingAt = now<br>			becameTerminating = <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">case</span> options.UpdateType == kubetypes.SyncPodKill:<br>			<span class="hljs-keyword">if</span> options.KillPodOptions != <span class="hljs-literal">nil</span> &amp;&amp; options.KillPodOptions.Evict &#123;<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is being evicted by the kubelet, begin teardown&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>				status.evicted = <span class="hljs-literal">true</span><br>			&#125; <span class="hljs-keyword">else</span> &#123;<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is being removed by the kubelet, begin teardown&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			&#125;<br>			status.terminatingAt = now<br>			becameTerminating = <span class="hljs-literal">true</span><br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// once a pod is terminating, all updates are kills and the grace period can only decrease</span><br>	<span class="hljs-keyword">var</span> wasGracePeriodShortened <span class="hljs-type">bool</span><br>	<span class="hljs-keyword">switch</span> &#123;<br>	<span class="hljs-keyword">case</span> status.IsTerminated():<br>		<span class="hljs-comment">// A terminated pod may still be waiting for cleanup - if we receive a runtime pod kill request</span><br>		<span class="hljs-comment">// due to housekeeping seeing an older cached version of the runtime pod simply ignore it until</span><br>		<span class="hljs-comment">// after the pod worker completes.</span><br>		<span class="hljs-keyword">if</span> isRuntimePod &#123;<br>			klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;Pod is waiting for termination, ignoring runtime-only kill until after pod worker is fully terminated&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;updateType&quot;</span>, options.UpdateType)<br>			<span class="hljs-keyword">return</span><br>		&#125;<br><br>		<span class="hljs-keyword">if</span> options.KillPodOptions != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">if</span> ch := options.KillPodOptions.CompletedCh; ch != <span class="hljs-literal">nil</span> &#123;<br>				<span class="hljs-built_in">close</span>(ch)<br>			&#125;<br>		&#125;<br>		options.KillPodOptions = <span class="hljs-literal">nil</span><br><br>	<span class="hljs-keyword">case</span> status.IsTerminationRequested():<br>		<span class="hljs-keyword">if</span> options.KillPodOptions == <span class="hljs-literal">nil</span> &#123;<br>			options.KillPodOptions = &amp;KillPodOptions&#123;&#125;<br>		&#125;<br><br>		<span class="hljs-keyword">if</span> ch := options.KillPodOptions.CompletedCh; ch != <span class="hljs-literal">nil</span> &#123;<br>			status.notifyPostTerminating = <span class="hljs-built_in">append</span>(status.notifyPostTerminating, ch)<br>		&#125;<br>		<span class="hljs-keyword">if</span> fn := options.KillPodOptions.PodStatusFunc; fn != <span class="hljs-literal">nil</span> &#123;<br>			status.statusPostTerminating = <span class="hljs-built_in">append</span>(status.statusPostTerminating, fn)<br>		&#125;<br><br>		gracePeriod, gracePeriodShortened := calculateEffectiveGracePeriod(status, pod, options.KillPodOptions)<br><br>		wasGracePeriodShortened = gracePeriodShortened<br>		status.gracePeriod = gracePeriod<br>		<span class="hljs-comment">// always set the grace period for syncTerminatingPod so we don&#x27;t have to recalculate,</span><br>		<span class="hljs-comment">// will never be zero.</span><br>		options.KillPodOptions.PodTerminationGracePeriodSecondsOverride = &amp;gracePeriod<br><br>	<span class="hljs-keyword">default</span>:<br>		<span class="hljs-comment">// KillPodOptions is not valid for sync actions outside of the terminating phase</span><br>		<span class="hljs-keyword">if</span> options.KillPodOptions != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">if</span> ch := options.KillPodOptions.CompletedCh; ch != <span class="hljs-literal">nil</span> &#123;<br>				<span class="hljs-built_in">close</span>(ch)<br>			&#125;<br>			options.KillPodOptions = <span class="hljs-literal">nil</span><br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// start the pod worker goroutine if it doesn&#x27;t exist</span><br>	podUpdates, exists := p.podUpdates[uid]<br>	<span class="hljs-keyword">if</span> !exists &#123;<br>		<span class="hljs-comment">// buffer the channel to avoid blocking this method</span><br>		podUpdates = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;, <span class="hljs-number">1</span>)<br>		p.podUpdates[uid] = podUpdates<br><br>		<span class="hljs-comment">// ensure that static pods start in the order they are received by UpdatePod</span><br>		<span class="hljs-keyword">if</span> kubetypes.IsStaticPod(pod) &#123;<br>			p.waitingToStartStaticPodsByFullname[status.fullname] =<br>				<span class="hljs-built_in">append</span>(p.waitingToStartStaticPodsByFullname[status.fullname], uid)<br>		&#125;<br><br>		<span class="hljs-comment">// allow testing of delays in the pod update channel</span><br>		<span class="hljs-keyword">var</span> outCh &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;<br>		<span class="hljs-keyword">if</span> p.workerChannelFn != <span class="hljs-literal">nil</span> &#123;<br>			outCh = p.workerChannelFn(uid, podUpdates)<br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			outCh = podUpdates<br>		&#125;<br><br>		<span class="hljs-comment">// spawn a pod worker</span><br>		<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>			<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> this should be a wait.Until with backoff to handle panics, and</span><br>			<span class="hljs-comment">// accept a context for shutdown</span><br>			<span class="hljs-keyword">defer</span> runtime.HandleCrash()<br>			<span class="hljs-keyword">defer</span> klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;Pod worker has stopped&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, uid)<br>			p.podWorkerLoop(uid, outCh)<br>		&#125;()<br>	&#125;<br><br>	<span class="hljs-comment">// measure the maximum latency between a call to UpdatePod and when the pod worker reacts to it</span><br>	<span class="hljs-comment">// by preserving the oldest StartTime</span><br>	<span class="hljs-keyword">if</span> status.pendingUpdate != <span class="hljs-literal">nil</span> &amp;&amp; !status.pendingUpdate.StartTime.IsZero() &amp;&amp; status.pendingUpdate.StartTime.Before(options.StartTime) &#123;<br>		options.StartTime = status.pendingUpdate.StartTime<br>	&#125;<br><br>	<span class="hljs-comment">// notify the pod worker there is a pending update</span><br>	status.pendingUpdate = &amp;options<br>	status.working = <span class="hljs-literal">true</span><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Notifying pod of pending update&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;workType&quot;</span>, status.WorkType())<br>	<span class="hljs-keyword">select</span> &#123;<br>	<span class="hljs-keyword">case</span> podUpdates &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;:<br>	<span class="hljs-keyword">default</span>:<br>	&#125;<br><br>	<span class="hljs-keyword">if</span> (becameTerminating || wasGracePeriodShortened) &amp;&amp; status.cancelFn != <span class="hljs-literal">nil</span> &#123;<br>		klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;Cancelling current pod sync&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KRef(ns, name), <span class="hljs-string">&quot;podUID&quot;</span>, uid, <span class="hljs-string">&quot;workType&quot;</span>, status.WorkType())<br>		status.cancelFn()<br>		<span class="hljs-keyword">return</span><br>	&#125;<br>&#125;<br><br></code></pre></td></tr></table></figure>
+
+<p><code>RuntimePod</code>是指正在被container runtime执行，但kubelet无法获取到对应Pod的相关配置信息的Pod。对于此种Pod，kubelet会执行<code>termination</code>操作。</p>
+<ol>
+<li>判断Pod是否为<code>RuntimePod</code></li>
+<li>将Pod的相关状态信息更新到<code>p.podSyncStatuses[uid]</code></li>
+<li>如果能从缓存中拿到该 pod 的缓存，而且 pod 处于终止状态，而这时候 options.UpdateType &#x3D;&#x3D; kubetypes.SyncPodCreate ，则说明使用相同 uid 的 pod 需要被重启，会被后续的程序处理。</li>
+<li>检查 pod 是否转换到<code>Terminating</code>状态。并根据相关状态去更新<code>options</code>和<code>status</code>的值。</li>
+<li>kubelet 会为每一个Pod创建一条单独的<code>goroutine</code>负责监听该Pod的更新事件并负责后续的状态更新，<code>p.podUpdates</code>负责跟踪kubelet所有启动的此类goroutine。若待更新的Pod不存在此<code>goroutine</code>，则调用<code>p.podWorkerLoop(uid, outCh)</code>创建。</li>
+<li>每次更新实际都是将更新事件发送到 podUpdates 通道，这个通道的另一端就是 <code>p.podWorkerLoop(uid, outCh)</code> 在监听。</li>
+</ol>
+<h2 id="p-podWorkerLoop-uid-outCh"><a href="#p-podWorkerLoop-uid-outCh" class="headerlink" title="p.podWorkerLoop(uid, outCh)"></a>p.podWorkerLoop(uid, outCh)</h2><p><code>podWorkerLoop</code>负责管理 Pod 的顺序状态更新，直到达到最终状态后退出。这个循环主要负责推动 Pod 经过以下四个主要阶段：</p>
+<ul>
+<li><p>等待开始（Wait to start）：确保同一时间不会有两个具有相同 UID 或全名的 Pod 同时运行。</p>
+</li>
+<li><p>同步（Sync）：通过协调期望的 Pod 规格和 Pod 的运行时状态来安排 Pod 的设置，这是一个组织 Pod 设置过程的阶段。</p>
+</li>
+<li><p>终止中（Terminating）：确保 Pod 中所有正在运行的容器都被停止。</p>
+</li>
+<li><p>已终止（Terminated）：清理必须释放的任何资源，以便 Pod 可以被删除。</p>
+</li>
+</ul>
+<p>其代码实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> podWorkerLoop(podUID types.UID, podUpdates &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>&#123;&#125;) &#123;<br>	<span class="hljs-keyword">var</span> lastSyncTime time.Time<br>	<span class="hljs-keyword">for</span> <span class="hljs-keyword">range</span> podUpdates &#123;<br>		ctx, update, canStart, canEverStart, ok := p.startPodSync(podUID)<br>		<span class="hljs-comment">// If we had no update waiting, it means someone initialized the channel without filling out pendingUpdate.</span><br>		<span class="hljs-keyword">if</span> !ok &#123;<br>			<span class="hljs-keyword">continue</span><br>		&#125;<br>		<span class="hljs-comment">// If the pod was terminated prior to the pod being allowed to start, we exit the loop.</span><br>		<span class="hljs-keyword">if</span> !canEverStart &#123;<br>			<span class="hljs-keyword">return</span><br>		&#125;<br>		<span class="hljs-comment">// If the pod is not yet ready to start, continue and wait for more updates.</span><br>		<span class="hljs-keyword">if</span> !canStart &#123;<br>			<span class="hljs-keyword">continue</span><br>		&#125;<br><br>		podUID, podRef := podUIDAndRefForUpdate(update.Options)<br><br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Processing pod event&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br>		<span class="hljs-keyword">var</span> isTerminal <span class="hljs-type">bool</span><br>		err := <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> <span class="hljs-type">error</span> &#123;<br>			<span class="hljs-comment">// The worker is responsible for ensuring the sync method sees the appropriate</span><br>			<span class="hljs-comment">// status updates on resyncs (the result of the last sync), transitions to</span><br>			<span class="hljs-comment">// terminating (no wait), or on terminated (whatever the most recent state is).</span><br>			<span class="hljs-comment">// Only syncing and terminating can generate pod status changes, while terminated</span><br>			<span class="hljs-comment">// pods ensure the most recent status makes it to the api server.</span><br>			<span class="hljs-keyword">var</span> status *kubecontainer.PodStatus<br>			<span class="hljs-keyword">var</span> err <span class="hljs-type">error</span><br>			<span class="hljs-keyword">switch</span> &#123;<br>			<span class="hljs-keyword">case</span> update.Options.RunningPod != <span class="hljs-literal">nil</span>:<br>				<span class="hljs-comment">// when we receive a running pod, we don&#x27;t need status at all because we are</span><br>				<span class="hljs-comment">// guaranteed to be terminating and we skip updates to the pod</span><br>			<span class="hljs-keyword">default</span>:<br>				<span class="hljs-comment">// wait until we see the next refresh from the PLEG via the cache (max 2s)</span><br>				<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> this adds ~1s of latency on all transitions from sync to terminating</span><br>				<span class="hljs-comment">//  to terminated, and on all termination retries (including evictions). We should</span><br>				<span class="hljs-comment">//  improve latency by making the pleg continuous and by allowing pod status</span><br>				<span class="hljs-comment">//  changes to be refreshed when key events happen (killPod, sync-&gt;terminating).</span><br>				<span class="hljs-comment">//  Improving this latency also reduces the possibility that a terminated</span><br>				<span class="hljs-comment">//  container&#x27;s status is garbage collected before we have a chance to update the</span><br>				<span class="hljs-comment">//  API server (thus losing the exit code).</span><br>				status, err = p.podCache.GetNewerThan(update.Options.Pod.UID, lastSyncTime)<br><br>				<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>					<span class="hljs-comment">// This is the legacy event thrown by manage pod loop all other events are now dispatched</span><br>					<span class="hljs-comment">// from syncPodFn</span><br>					p.recorder.Eventf(update.Options.Pod, v1.EventTypeWarning, events.FailedSync, <span class="hljs-string">&quot;error determining status: %v&quot;</span>, err)<br>					<span class="hljs-keyword">return</span> err<br>				&#125;<br>			&#125;<br><br>			<span class="hljs-comment">// Take the appropriate action (illegal phases are prevented by UpdatePod)</span><br>			<span class="hljs-keyword">switch</span> &#123;<br>			<span class="hljs-keyword">case</span> update.WorkType == TerminatedPod:<br>				err = p.podSyncer.SyncTerminatedPod(ctx, update.Options.Pod, status)<br><br>			<span class="hljs-keyword">case</span> update.WorkType == TerminatingPod:<br>				<span class="hljs-keyword">var</span> gracePeriod *<span class="hljs-type">int64</span><br>				<span class="hljs-keyword">if</span> opt := update.Options.KillPodOptions; opt != <span class="hljs-literal">nil</span> &#123;<br>					gracePeriod = opt.PodTerminationGracePeriodSecondsOverride<br>				&#125;<br>				podStatusFn := p.acknowledgeTerminating(podUID)<br><br>				<span class="hljs-comment">// if we only have a running pod, terminate it directly</span><br>				<span class="hljs-keyword">if</span> update.Options.RunningPod != <span class="hljs-literal">nil</span> &#123;<br>					err = p.podSyncer.SyncTerminatingRuntimePod(ctx, update.Options.RunningPod)<br>				&#125; <span class="hljs-keyword">else</span> &#123;<br>					err = p.podSyncer.SyncTerminatingPod(ctx, update.Options.Pod, status, gracePeriod, podStatusFn)<br>				&#125;<br><br>			<span class="hljs-keyword">default</span>:<br>				isTerminal, err = p.podSyncer.SyncPod(ctx, update.Options.UpdateType, update.Options.Pod, update.Options.MirrorPod, status)<br>			&#125;<br><br>			lastSyncTime = p.clock.Now()<br>			<span class="hljs-keyword">return</span> err<br>		&#125;()<br><br>		<span class="hljs-keyword">var</span> phaseTransition <span class="hljs-type">bool</span><br>		<span class="hljs-keyword">switch</span> &#123;<br>		<span class="hljs-keyword">case</span> errors.Is(err, context.Canceled):<br>			<span class="hljs-comment">// when the context is cancelled we expect an update to already be queued</span><br>			klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Sync exited with context cancellation error&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br><br>		<span class="hljs-keyword">case</span> err != <span class="hljs-literal">nil</span>:<br>			<span class="hljs-comment">// we will queue a retry</span><br>			klog.ErrorS(err, <span class="hljs-string">&quot;Error syncing pod, skipping&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br><br>		<span class="hljs-keyword">case</span> update.WorkType == TerminatedPod:<br>			<span class="hljs-comment">// we can shut down the worker</span><br>			p.completeTerminated(podUID)<br>			<span class="hljs-keyword">if</span> start := update.Options.StartTime; !start.IsZero() &#123;<br>				metrics.PodWorkerDuration.WithLabelValues(<span class="hljs-string">&quot;terminated&quot;</span>).Observe(metrics.SinceInSeconds(start))<br>			&#125;<br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Processing pod event done&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br>			<span class="hljs-keyword">return</span><br><br>		<span class="hljs-keyword">case</span> update.WorkType == TerminatingPod:<br>			<span class="hljs-comment">// pods that don&#x27;t exist in config don&#x27;t need to be terminated, other loops will clean them up</span><br>			<span class="hljs-keyword">if</span> update.Options.RunningPod != <span class="hljs-literal">nil</span> &#123;<br>				p.completeTerminatingRuntimePod(podUID)<br>				<span class="hljs-keyword">if</span> start := update.Options.StartTime; !start.IsZero() &#123;<br>					metrics.PodWorkerDuration.WithLabelValues(update.Options.UpdateType.String()).Observe(metrics.SinceInSeconds(start))<br>				&#125;<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Processing pod event done&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br>				<span class="hljs-keyword">return</span><br>			&#125;<br>			<span class="hljs-comment">// otherwise we move to the terminating phase</span><br>			p.completeTerminating(podUID)<br>			phaseTransition = <span class="hljs-literal">true</span><br><br>		<span class="hljs-keyword">case</span> isTerminal:<br>			<span class="hljs-comment">// if syncPod indicated we are now terminal, set the appropriate pod status to move to terminating</span><br>			klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is terminal&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br>			p.completeSync(podUID)<br>			phaseTransition = <span class="hljs-literal">true</span><br>		&#125;<br><br>		<span class="hljs-comment">// queue a retry if necessary, then put the next event in the channel if any</span><br>		p.completeWork(podUID, phaseTransition, err)<br>		<span class="hljs-keyword">if</span> start := update.Options.StartTime; !start.IsZero() &#123;<br>			metrics.PodWorkerDuration.WithLabelValues(update.Options.UpdateType.String()).Observe(metrics.SinceInSeconds(start))<br>		&#125;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Processing pod event done&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, podRef, <span class="hljs-string">&quot;podUID&quot;</span>, podUID, <span class="hljs-string">&quot;updateType&quot;</span>, update.WorkType)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<ol>
+<li>调用<code>p.startPodSync(podUID)</code>判断是否pod是否已经启动，若未启动，则返回能否启动，同时在<code>p.startPodSync</code>内部更新了pod的缓存状态。</li>
+<li><code> p.podCache.GetNewerThan(update.Options.Pod.UID, lastSyncTime)</code>从缓存中根据 uid 获取 pod 的状态信息</li>
+<li>根据 &#96;update.WorkType&#96;&#96; 的不同调用不同的接口来同步 pod ，有以下接口。</li>
+</ol>
+<ul>
+<li>p.syncPod() ，对新的 pod 进行同步。</li>
+<li>p.syncTerminatedPod() ，对已退出状态的 pod 进行同步。</li>
+<li>p.syncTerminatingPod() ，对正在退出状态的 pod 进行同步。</li>
+<li>p.SyncTerminatingRuntimePod() ，对<code>RuntimePod</code>进行同步</li>
+</ul>
+<ol start="4">
+<li>根据同步类型的完成，不同的同步接口回调不同的完成接口。</li>
+</ol>
+<ul>
+<li>p.completeTerminatingRuntimePod() ，当退出状态的孤儿 pod 完成同步时调用。</li>
+<li>p.completeTerminating() ，当退出状态的 pod 完成同步时调用。</li>
+<li>p.completeSync() ，当完成新 pod 的同步时调用。</li>
+<li>p.completeWork() ，完成同步工作时调用。</li>
+</ul>
+<h3 id="p-syncPod"><a href="#p-syncPod" class="headerlink" title="p.syncPod()"></a>p.syncPod()</h3><p><code>p.syncPod()</code> 负责单个Pod的状态同步，这是一个可重入的方法，负责推进Pod的状态直到期望的状态为止，其代码实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br><span class="line">152</span><br><span class="line">153</span><br><span class="line">154</span><br><span class="line">155</span><br><span class="line">156</span><br><span class="line">157</span><br><span class="line">158</span><br><span class="line">159</span><br><span class="line">160</span><br><span class="line">161</span><br><span class="line">162</span><br><span class="line">163</span><br><span class="line">164</span><br><span class="line">165</span><br><span class="line">166</span><br><span class="line">167</span><br><span class="line">168</span><br><span class="line">169</span><br><span class="line">170</span><br><span class="line">171</span><br><span class="line">172</span><br><span class="line">173</span><br><span class="line">174</span><br><span class="line">175</span><br><span class="line">176</span><br><span class="line">177</span><br><span class="line">178</span><br><span class="line">179</span><br><span class="line">180</span><br><span class="line">181</span><br><span class="line">182</span><br><span class="line">183</span><br><span class="line">184</span><br><span class="line">185</span><br><span class="line">186</span><br><span class="line">187</span><br><span class="line">188</span><br><span class="line">189</span><br><span class="line">190</span><br><span class="line">191</span><br><span class="line">192</span><br><span class="line">193</span><br><span class="line">194</span><br><span class="line">195</span><br><span class="line">196</span><br><span class="line">197</span><br><span class="line">198</span><br><span class="line">199</span><br><span class="line">200</span><br><span class="line">201</span><br><span class="line">202</span><br><span class="line">203</span><br><span class="line">204</span><br><span class="line">205</span><br><span class="line">206</span><br><span class="line">207</span><br><span class="line">208</span><br><span class="line">209</span><br><span class="line">210</span><br><span class="line">211</span><br><span class="line">212</span><br><span class="line">213</span><br><span class="line">214</span><br><span class="line">215</span><br><span class="line">216</span><br><span class="line">217</span><br><span class="line">218</span><br><span class="line">219</span><br><span class="line">220</span><br><span class="line">221</span><br><span class="line">222</span><br><span class="line">223</span><br><span class="line">224</span><br><span class="line">225</span><br><span class="line">226</span><br><span class="line">227</span><br><span class="line">228</span><br><span class="line">229</span><br><span class="line">230</span><br><span class="line">231</span><br><span class="line">232</span><br><span class="line">233</span><br><span class="line">234</span><br><span class="line">235</span><br><span class="line">236</span><br><span class="line">237</span><br><span class="line">238</span><br><span class="line">239</span><br><span class="line">240</span><br><span class="line">241</span><br><span class="line">242</span><br><span class="line">243</span><br><span class="line">244</span><br><span class="line">245</span><br><span class="line">246</span><br><span class="line">247</span><br><span class="line">248</span><br><span class="line">249</span><br><span class="line">250</span><br><span class="line">251</span><br><span class="line">252</span><br><span class="line">253</span><br><span class="line">254</span><br><span class="line">255</span><br><span class="line">256</span><br><span class="line">257</span><br><span class="line">258</span><br><span class="line">259</span><br><span class="line">260</span><br><span class="line">261</span><br><span class="line">262</span><br><span class="line">263</span><br><span class="line">264</span><br><span class="line">265</span><br><span class="line">266</span><br><span class="line">267</span><br><span class="line">268</span><br><span class="line">269</span><br><span class="line">270</span><br><span class="line">271</span><br><span class="line">272</span><br><span class="line">273</span><br><span class="line">274</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> SyncPod(ctx context.Context, updateType kubetypes.SyncPodType, pod, mirrorPod *v1.Pod, podStatus *kubecontainer.PodStatus) (isTerminal <span class="hljs-type">bool</span>, err <span class="hljs-type">error</span>) &#123;<br>	ctx, otelSpan := kl.tracer.Start(ctx, <span class="hljs-string">&quot;syncPod&quot;</span>, trace.WithAttributes(<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.uid&quot;</span>, <span class="hljs-type">string</span>(pod.UID)),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod&quot;</span>, klog.KObj(pod).String()),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.name&quot;</span>, pod.Name),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.update_type&quot;</span>, updateType.String()),<br>		attribute.String(<span class="hljs-string">&quot;k8s.namespace.name&quot;</span>, pod.Namespace),<br>	))<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncPod enter&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncPod exit&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID, <span class="hljs-string">&quot;isTerminal&quot;</span>, isTerminal)<br>		otelSpan.End()<br>	&#125;()<br><br>	<span class="hljs-comment">// Latency measurements for the main workflow are relative to the</span><br>	<span class="hljs-comment">// first time the pod was seen by kubelet.</span><br>	<span class="hljs-keyword">var</span> firstSeenTime time.Time<br>	<span class="hljs-keyword">if</span> firstSeenTimeStr, ok := pod.Annotations[kubetypes.ConfigFirstSeenAnnotationKey]; ok &#123;<br>		firstSeenTime = kubetypes.ConvertToTimestamp(firstSeenTimeStr).Get()<br>	&#125;<br><br>	<span class="hljs-comment">// Record pod worker start latency if being created</span><br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> make pod workers record their own latencies</span><br>	<span class="hljs-keyword">if</span> updateType == kubetypes.SyncPodCreate &#123;<br>		<span class="hljs-keyword">if</span> !firstSeenTime.IsZero() &#123;<br>			<span class="hljs-comment">// This is the first time we are syncing the pod. Record the latency</span><br>			<span class="hljs-comment">// since kubelet first saw the pod if firstSeenTime is set.</span><br>			metrics.PodWorkerStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))<br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;First seen time not recorded for pod&quot;</span>,<br>				<span class="hljs-string">&quot;podUID&quot;</span>, pod.UID,<br>				<span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Generate final API pod status with pod and status manager status</span><br>	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus, <span class="hljs-literal">false</span>)<br>	<span class="hljs-comment">// The pod IP may be changed in generateAPIPodStatus if the pod is using host network. (See #24576)</span><br>	<span class="hljs-comment">// TODO(random-liu): After writing pod spec into container labels, check whether pod is using host network, and</span><br>	<span class="hljs-comment">// set pod IP to hostIP directly in runtime.GetPodStatus</span><br>	podStatus.IPs = <span class="hljs-built_in">make</span>([]<span class="hljs-type">string</span>, <span class="hljs-number">0</span>, <span class="hljs-built_in">len</span>(apiPodStatus.PodIPs))<br>	<span class="hljs-keyword">for</span> _, ipInfo := <span class="hljs-keyword">range</span> apiPodStatus.PodIPs &#123;<br>		podStatus.IPs = <span class="hljs-built_in">append</span>(podStatus.IPs, ipInfo.IP)<br>	&#125;<br>	<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(podStatus.IPs) == <span class="hljs-number">0</span> &amp;&amp; <span class="hljs-built_in">len</span>(apiPodStatus.PodIP) &gt; <span class="hljs-number">0</span> &#123;<br>		podStatus.IPs = []<span class="hljs-type">string</span>&#123;apiPodStatus.PodIP&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// If the pod is terminal, we don&#x27;t need to continue to setup the pod</span><br>	<span class="hljs-keyword">if</span> apiPodStatus.Phase == v1.PodSucceeded || apiPodStatus.Phase == v1.PodFailed &#123;<br>		kl.statusManager.SetPodStatus(pod, apiPodStatus)<br>		isTerminal = <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">return</span> isTerminal, <span class="hljs-literal">nil</span><br>	&#125;<br><br>	<span class="hljs-comment">// If the pod should not be running, we request the pod&#x27;s containers be stopped. This is not the same</span><br>	<span class="hljs-comment">// as termination (we want to stop the pod, but potentially restart it later if soft admission allows</span><br>	<span class="hljs-comment">// it later). Set the status and phase appropriately</span><br>	runnable := kl.canRunPod(pod)<br>	<span class="hljs-keyword">if</span> !runnable.Admit &#123;<br>		<span class="hljs-comment">// Pod is not runnable; and update the Pod and Container statuses to why.</span><br>		<span class="hljs-keyword">if</span> apiPodStatus.Phase != v1.PodFailed &amp;&amp; apiPodStatus.Phase != v1.PodSucceeded &#123;<br>			apiPodStatus.Phase = v1.PodPending<br>		&#125;<br>		apiPodStatus.Reason = runnable.Reason<br>		apiPodStatus.Message = runnable.Message<br>		<span class="hljs-comment">// Waiting containers are not creating.</span><br>		<span class="hljs-keyword">const</span> waitingReason = <span class="hljs-string">&quot;Blocked&quot;</span><br>		<span class="hljs-keyword">for</span> _, cs := <span class="hljs-keyword">range</span> apiPodStatus.InitContainerStatuses &#123;<br>			<span class="hljs-keyword">if</span> cs.State.Waiting != <span class="hljs-literal">nil</span> &#123;<br>				cs.State.Waiting.Reason = waitingReason<br>			&#125;<br>		&#125;<br>		<span class="hljs-keyword">for</span> _, cs := <span class="hljs-keyword">range</span> apiPodStatus.ContainerStatuses &#123;<br>			<span class="hljs-keyword">if</span> cs.State.Waiting != <span class="hljs-literal">nil</span> &#123;<br>				cs.State.Waiting.Reason = waitingReason<br>			&#125;<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Record the time it takes for the pod to become running</span><br>	<span class="hljs-comment">// since kubelet first saw the pod if firstSeenTime is set.</span><br>	existingStatus, ok := kl.statusManager.GetPodStatus(pod.UID)<br>	<span class="hljs-keyword">if</span> !ok || existingStatus.Phase == v1.PodPending &amp;&amp; apiPodStatus.Phase == v1.PodRunning &amp;&amp;<br>		!firstSeenTime.IsZero() &#123;<br>		metrics.PodStartDuration.Observe(metrics.SinceInSeconds(firstSeenTime))<br>	&#125;<br><br>	kl.statusManager.SetPodStatus(pod, apiPodStatus)<br><br>	<span class="hljs-comment">// Pods that are not runnable must be stopped - return a typed error to the pod worker</span><br>	<span class="hljs-keyword">if</span> !runnable.Admit &#123;<br>		klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Pod is not runnable and must have running containers stopped&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID, <span class="hljs-string">&quot;message&quot;</span>, runnable.Message)<br>		<span class="hljs-keyword">var</span> syncErr <span class="hljs-type">error</span><br>		p := kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), podStatus)<br>		<span class="hljs-keyword">if</span> err := kl.killPod(ctx, pod, p, <span class="hljs-literal">nil</span>); err != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">if</span> !wait.Interrupted(err) &#123;<br>				kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, <span class="hljs-string">&quot;error killing pod: %v&quot;</span>, err)<br>				syncErr = fmt.Errorf(<span class="hljs-string">&quot;error killing pod: %w&quot;</span>, err)<br>				utilruntime.HandleError(syncErr)<br>			&#125;<br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			<span class="hljs-comment">// There was no error killing the pod, but the pod cannot be run.</span><br>			<span class="hljs-comment">// Return an error to signal that the sync loop should back off.</span><br>			syncErr = fmt.Errorf(<span class="hljs-string">&quot;pod cannot be run: %v&quot;</span>, runnable.Message)<br>		&#125;<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, syncErr<br>	&#125;<br><br>	<span class="hljs-comment">// If the network plugin is not ready, only start the pod if it uses the host network</span><br>	<span class="hljs-keyword">if</span> err := kl.runtimeState.networkErrors(); err != <span class="hljs-literal">nil</span> &amp;&amp; !kubecontainer.IsHostNetworkPod(pod) &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.NetworkNotReady, <span class="hljs-string">&quot;%s: %v&quot;</span>, NetworkNotReadyErrorMsg, err)<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, fmt.Errorf(<span class="hljs-string">&quot;%s: %v&quot;</span>, NetworkNotReadyErrorMsg, err)<br>	&#125;<br><br>	<span class="hljs-comment">// ensure the kubelet knows about referenced secrets or configmaps used by the pod</span><br>	<span class="hljs-keyword">if</span> !kl.podWorkers.IsPodTerminationRequested(pod.UID) &#123;<br>		<span class="hljs-keyword">if</span> kl.secretManager != <span class="hljs-literal">nil</span> &#123;<br>			kl.secretManager.RegisterPod(pod)<br>		&#125;<br>		<span class="hljs-keyword">if</span> kl.configMapManager != <span class="hljs-literal">nil</span> &#123;<br>			kl.configMapManager.RegisterPod(pod)<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Create Cgroups for the pod and apply resource parameters</span><br>	<span class="hljs-comment">// to them if cgroups-per-qos flag is enabled.</span><br>	pcm := kl.containerManager.NewPodContainerManager()<br>	<span class="hljs-comment">// If pod has already been terminated then we need not create</span><br>	<span class="hljs-comment">// or update the pod&#x27;s cgroup</span><br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> once context cancellation is added this check can be removed</span><br>	<span class="hljs-keyword">if</span> !kl.podWorkers.IsPodTerminationRequested(pod.UID) &#123;<br>		<span class="hljs-comment">// When the kubelet is restarted with the cgroups-per-qos</span><br>		<span class="hljs-comment">// flag enabled, all the pod&#x27;s running containers</span><br>		<span class="hljs-comment">// should be killed intermittently and brought back up</span><br>		<span class="hljs-comment">// under the qos cgroup hierarchy.</span><br>		<span class="hljs-comment">// Check if this is the pod&#x27;s first sync</span><br>		firstSync := <span class="hljs-literal">true</span><br>		<span class="hljs-keyword">for</span> _, containerStatus := <span class="hljs-keyword">range</span> apiPodStatus.ContainerStatuses &#123;<br>			<span class="hljs-keyword">if</span> containerStatus.State.Running != <span class="hljs-literal">nil</span> &#123;<br>				firstSync = <span class="hljs-literal">false</span><br>				<span class="hljs-keyword">break</span><br>			&#125;<br>		&#125;<br>		<span class="hljs-comment">// Don&#x27;t kill containers in pod if pod&#x27;s cgroups already</span><br>		<span class="hljs-comment">// exists or the pod is running for the first time</span><br>		podKilled := <span class="hljs-literal">false</span><br>		<span class="hljs-keyword">if</span> !pcm.Exists(pod) &amp;&amp; !firstSync &#123;<br>			p := kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), podStatus)<br>			<span class="hljs-keyword">if</span> err := kl.killPod(ctx, pod, p, <span class="hljs-literal">nil</span>); err == <span class="hljs-literal">nil</span> &#123;<br>				<span class="hljs-keyword">if</span> wait.Interrupted(err) &#123;<br>					<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, err<br>				&#125;<br>				podKilled = <span class="hljs-literal">true</span><br>			&#125; <span class="hljs-keyword">else</span> &#123;<br>				klog.ErrorS(err, <span class="hljs-string">&quot;KillPod failed&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podStatus&quot;</span>, podStatus)<br>			&#125;<br>		&#125;<br>		<span class="hljs-comment">// Create and Update pod&#x27;s Cgroups</span><br>		<span class="hljs-comment">// Don&#x27;t create cgroups for run once pod if it was killed above</span><br>		<span class="hljs-comment">// The current policy is not to restart the run once pods when</span><br>		<span class="hljs-comment">// the kubelet is restarted with the new flag as run once pods are</span><br>		<span class="hljs-comment">// expected to run only once and if the kubelet is restarted then</span><br>		<span class="hljs-comment">// they are not expected to run again.</span><br>		<span class="hljs-comment">// We don&#x27;t create and apply updates to cgroup if its a run once pod and was killed above</span><br>		<span class="hljs-keyword">if</span> !(podKilled &amp;&amp; pod.Spec.RestartPolicy == v1.RestartPolicyNever) &#123;<br>			<span class="hljs-keyword">if</span> !pcm.Exists(pod) &#123;<br>				<span class="hljs-keyword">if</span> err := kl.containerManager.UpdateQOSCgroups(); err != <span class="hljs-literal">nil</span> &#123;<br>					klog.V(<span class="hljs-number">2</span>).InfoS(<span class="hljs-string">&quot;Failed to update QoS cgroups while syncing pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;err&quot;</span>, err)<br>				&#125;<br>				<span class="hljs-keyword">if</span> err := pcm.EnsureExists(pod); err != <span class="hljs-literal">nil</span> &#123;<br>					kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToCreatePodContainer, <span class="hljs-string">&quot;unable to ensure pod container exists: %v&quot;</span>, err)<br>					<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, fmt.Errorf(<span class="hljs-string">&quot;failed to ensure that the pod: %v cgroups exist and are correctly applied: %v&quot;</span>, pod.UID, err)<br>				&#125;<br>			&#125;<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Create Mirror Pod for Static Pod if it doesn&#x27;t already exist</span><br>	<span class="hljs-keyword">if</span> kubetypes.IsStaticPod(pod) &#123;<br>		deleted := <span class="hljs-literal">false</span><br>		<span class="hljs-keyword">if</span> mirrorPod != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">if</span> mirrorPod.DeletionTimestamp != <span class="hljs-literal">nil</span> || !kubepod.IsMirrorPodOf(mirrorPod, pod) &#123;<br>				<span class="hljs-comment">// The mirror pod is semantically different from the static pod. Remove</span><br>				<span class="hljs-comment">// it. The mirror pod will get recreated later.</span><br>				klog.InfoS(<span class="hljs-string">&quot;Trying to delete pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, mirrorPod.ObjectMeta.UID)<br>				podFullName := kubecontainer.GetPodFullName(pod)<br>				<span class="hljs-keyword">var</span> err <span class="hljs-type">error</span><br>				deleted, err = kl.mirrorPodClient.DeleteMirrorPod(podFullName, &amp;mirrorPod.ObjectMeta.UID)<br>				<span class="hljs-keyword">if</span> deleted &#123;<br>					klog.InfoS(<span class="hljs-string">&quot;Deleted mirror pod because it is outdated&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(mirrorPod))<br>				&#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>					klog.ErrorS(err, <span class="hljs-string">&quot;Failed deleting mirror pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(mirrorPod))<br>				&#125;<br>			&#125;<br>		&#125;<br>		<span class="hljs-keyword">if</span> mirrorPod == <span class="hljs-literal">nil</span> || deleted &#123;<br>			node, err := kl.GetNode()<br>			<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> || node.DeletionTimestamp != <span class="hljs-literal">nil</span> &#123;<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;No need to create a mirror pod, since node has been removed from the cluster&quot;</span>, <span class="hljs-string">&quot;node&quot;</span>, klog.KRef(<span class="hljs-string">&quot;&quot;</span>, <span class="hljs-type">string</span>(kl.nodeName)))<br>			&#125; <span class="hljs-keyword">else</span> &#123;<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Creating a mirror pod for static pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>				<span class="hljs-keyword">if</span> err := kl.mirrorPodClient.CreateMirrorPod(pod); err != <span class="hljs-literal">nil</span> &#123;<br>					klog.ErrorS(err, <span class="hljs-string">&quot;Failed creating a mirror pod for&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>				&#125;<br>			&#125;<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Make data directories for the pod</span><br>	<span class="hljs-keyword">if</span> err := kl.makePodDataDirs(pod); err != <span class="hljs-literal">nil</span> &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToMakePodDataDirectories, <span class="hljs-string">&quot;error making pod data directories: %v&quot;</span>, err)<br>		klog.ErrorS(err, <span class="hljs-string">&quot;Unable to make pod data directories for pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, err<br>	&#125;<br><br>	<span class="hljs-comment">// Wait for volumes to attach/mount</span><br>	<span class="hljs-keyword">if</span> err := kl.volumeManager.WaitForAttachAndMount(ctx, pod); err != <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">if</span> !wait.Interrupted(err) &#123;<br>			kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedMountVolume, <span class="hljs-string">&quot;Unable to attach or mount volumes: %v&quot;</span>, err)<br>			klog.ErrorS(err, <span class="hljs-string">&quot;Unable to attach or mount volumes for pod; skipping pod&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>		&#125;<br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, err<br>	&#125;<br><br>	<span class="hljs-comment">// Fetch the pull secrets for the pod</span><br>	pullSecrets := kl.getPullSecretsForPod(pod)<br><br>	<span class="hljs-comment">// Ensure the pod is being probed</span><br>	kl.probeManager.AddPod(pod)<br><br>	<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) &#123;<br>		<span class="hljs-comment">// Handle pod resize here instead of doing it in HandlePodUpdates because</span><br>		<span class="hljs-comment">// this conveniently retries any Deferred resize requests</span><br>		<span class="hljs-comment">// TODO(vinaykul,InPlacePodVerticalScaling): Investigate doing this in HandlePodUpdates + periodic SyncLoop scan</span><br>		<span class="hljs-comment">//     See: https://github.com/kubernetes/kubernetes/pull/102884#discussion_r663160060</span><br>		<span class="hljs-keyword">if</span> kl.podWorkers.CouldHaveRunningContainers(pod.UID) &amp;&amp; !kubetypes.IsStaticPod(pod) &#123;<br>			pod = kl.handlePodResourcesResize(pod)<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// TODO(#113606): connect this with the incoming context parameter, which comes from the pod worker.</span><br>	<span class="hljs-comment">// Currently, using that context causes test failures. To remove this todoCtx, any wait.Interrupted</span><br>	<span class="hljs-comment">// errors need to be filtered from result and bypass the reasonCache - cancelling the context for</span><br>	<span class="hljs-comment">// SyncPod is a known and deliberate error, not a generic error.</span><br>	todoCtx := context.TODO()<br>	<span class="hljs-comment">// Call the container runtime&#x27;s SyncPod callback</span><br>	result := kl.containerRuntime.SyncPod(todoCtx, pod, podStatus, pullSecrets, kl.backOff)<br>	kl.reasonCache.Update(pod.UID, result)<br>	<span class="hljs-keyword">if</span> err := result.Error(); err != <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-comment">// Do not return error if the only failures were pods in backoff</span><br>		<span class="hljs-keyword">for</span> _, r := <span class="hljs-keyword">range</span> result.SyncResults &#123;<br>			<span class="hljs-keyword">if</span> r.Error != kubecontainer.ErrCrashLoopBackOff &amp;&amp; r.Error != images.ErrImagePullBackOff &#123;<br>				<span class="hljs-comment">// Do not record an event here, as we keep all event logging for sync pod failures</span><br>				<span class="hljs-comment">// local to container runtime, so we get better errors.</span><br>				<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, err<br>			&#125;<br>		&#125;<br><br>		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, <span class="hljs-literal">nil</span><br>	&#125;<br><br>	<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.InPlacePodVerticalScaling) &amp;&amp; isPodResizeInProgress(pod, &amp;apiPodStatus) &#123;<br>		<span class="hljs-comment">// While resize is in progress, periodically call PLEG to update pod cache</span><br>		runningPod := kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), podStatus)<br>		<span class="hljs-keyword">if</span> err, _ := kl.pleg.UpdateCache(&amp;runningPod, pod.UID); err != <span class="hljs-literal">nil</span> &#123;<br>			klog.ErrorS(err, <span class="hljs-string">&quot;Failed to update pod cache&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod))<br>			<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, err<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>, <span class="hljs-literal">nil</span><br>&#125;<br><br></code></pre></td></tr></table></figure>
+<p>&#x2F;&#x2F;   - If the pod is being created, record pod worker start latency<br>&#x2F;&#x2F;   - Call generateAPIPodStatus to prepare an v1.PodStatus for the pod<br>&#x2F;&#x2F;   - If the pod is being seen as running for the first time, record pod<br>&#x2F;&#x2F;     start latency<br>&#x2F;&#x2F;   - Update the status of the pod in the status manager<br>&#x2F;&#x2F;   - Stop the pod’s containers if it should not be running due to soft<br>&#x2F;&#x2F;     admission<br>&#x2F;&#x2F;   - Ensure any background tracking for a runnable pod is started<br>&#x2F;&#x2F;   - Create a mirror pod if the pod is a static pod, and does not<br>&#x2F;&#x2F;     already have a mirror pod<br>&#x2F;&#x2F;   - Create the data directories for the pod if they do not exist<br>&#x2F;&#x2F;   - Wait for volumes to attach&#x2F;mount<br>&#x2F;&#x2F;   - Fetch the pull secrets for the pod<br>&#x2F;&#x2F;   - Call the container runtime’s SyncPod callback<br>&#x2F;&#x2F;   - Update the traffic shaping for the pod’s ingress and egress limits<br>&#x2F;&#x2F;</p>
+<ol>
+<li>调用<code>generateAPIPodStatus</code>为Pod生成一个<code>v1.PodStatus</code>结构体，并把信息更新到缓存中。</li>
+<li>调用<code>kl.canRunPod(pod)</code>对 pod 进行软准入校验，检查扩展资源、节点是否处于正在关闭、security context 白名单、驱逐、拓扑等信息，如果检查不通过则终止掉 pod 。</li>
+<li>创建和更新Pod的<code>Cgroups</code></li>
+<li>判断是否是Static Pod，且 mirror pod 不存在，则创建 mirror pod 。</li>
+<li>如果 pod 的相关数据目录不存在，则为 pod 创建相关数据目录。</li>
+<li>等待 volumes 挂载&#x2F;卸载，拉取 secrets 或 configmap ，获取镜像拉取<code>pullSecrets</code>。</li>
+<li>调用容器运行时的 <code>kl.containerRuntime.SyncPod()</code> 接口创建容器。</li>
+</ol>
+<h2 id="p-podSyncer-SyncTerminatedPod"><a href="#p-podSyncer-SyncTerminatedPod" class="headerlink" title="p.podSyncer.SyncTerminatedPod()"></a>p.podSyncer.SyncTerminatedPod()</h2><p><code>SyncTerminatedPod</code>负责清除已经处于terminated 状态的pod的相关资源，其代码实现如下：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> SyncTerminatedPod(ctx context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus) <span class="hljs-type">error</span> &#123;<br>	ctx, otelSpan := kl.tracer.Start(ctx, <span class="hljs-string">&quot;syncTerminatedPod&quot;</span>, trace.WithAttributes(<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.uid&quot;</span>, <span class="hljs-type">string</span>(pod.UID)),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod&quot;</span>, klog.KObj(pod).String()),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.name&quot;</span>, pod.Name),<br>		attribute.String(<span class="hljs-string">&quot;k8s.namespace.name&quot;</span>, pod.Namespace),<br>	))<br>	<span class="hljs-keyword">defer</span> otelSpan.End()<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatedPod enter&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-keyword">defer</span> klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatedPod exit&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	<span class="hljs-comment">// generate the final status of the pod</span><br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> should we simply fold this into TerminatePod? that would give a single pod update</span><br>	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus, <span class="hljs-literal">true</span>)<br><br>	kl.statusManager.SetPodStatus(pod, apiPodStatus)<br><br>	<span class="hljs-comment">// volumes are unmounted after the pod worker reports ShouldPodRuntimeBeRemoved (which is satisfied</span><br>	<span class="hljs-comment">// before syncTerminatedPod is invoked)</span><br>	<span class="hljs-keyword">if</span> err := kl.volumeManager.WaitForUnmount(ctx, pod); err != <span class="hljs-literal">nil</span> &#123;<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod termination unmounted volumes&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	<span class="hljs-keyword">if</span> !kl.keepTerminatedPodVolumes &#123;<br>		<span class="hljs-comment">// This waiting loop relies on the background cleanup which starts after pod workers respond</span><br>		<span class="hljs-comment">// true for ShouldPodRuntimeBeRemoved, which happens after `SyncTerminatingPod` is completed.</span><br>		<span class="hljs-keyword">if</span> err := wait.PollUntilContextCancel(ctx, <span class="hljs-number">100</span>*time.Millisecond, <span class="hljs-literal">true</span>, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(ctx context.Context)</span></span> (<span class="hljs-type">bool</span>, <span class="hljs-type">error</span>) &#123;<br>			volumesExist := kl.podVolumesExist(pod.UID)<br>			<span class="hljs-keyword">if</span> volumesExist &#123;<br>				klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;Pod is terminated, but some volumes have not been cleaned up&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>			&#125;<br>			<span class="hljs-keyword">return</span> !volumesExist, <span class="hljs-literal">nil</span><br>		&#125;); err != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">return</span> err<br>		&#125;<br>		klog.V(<span class="hljs-number">3</span>).InfoS(<span class="hljs-string">&quot;Pod termination cleaned up volume paths&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	&#125;<br><br>	<span class="hljs-comment">// After volume unmount is complete, let the secret and configmap managers know we&#x27;re done with this pod</span><br>	<span class="hljs-keyword">if</span> kl.secretManager != <span class="hljs-literal">nil</span> &#123;<br>		kl.secretManager.UnregisterPod(pod)<br>	&#125;<br>	<span class="hljs-keyword">if</span> kl.configMapManager != <span class="hljs-literal">nil</span> &#123;<br>		kl.configMapManager.UnregisterPod(pod)<br>	&#125;<br><br>	<span class="hljs-comment">// Note: we leave pod containers to be reclaimed in the background since dockershim requires the</span><br>	<span class="hljs-comment">// container for retrieving logs and we want to make sure logs are available until the pod is</span><br>	<span class="hljs-comment">// physically deleted.</span><br><br>	<span class="hljs-comment">// remove any cgroups in the hierarchy for pods that are no longer running.</span><br>	<span class="hljs-keyword">if</span> kl.cgroupsPerQOS &#123;<br>		pcm := kl.containerManager.NewPodContainerManager()<br>		name, _ := pcm.GetPodContainerName(pod)<br>		<span class="hljs-keyword">if</span> err := pcm.Destroy(name); err != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">return</span> err<br>		&#125;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod termination removed cgroups&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	&#125;<br><br>	kl.usernsManager.Release(pod.UID)<br><br>	<span class="hljs-comment">// mark the final pod status</span><br>	kl.statusManager.TerminatePod(pod)<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is terminated and will need no more status updates&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>&#125;<br></code></pre></td></tr></table></figure>
+
+<ol>
+<li>卸载存储卷。</li>
+<li>注销 secrets 和 configmap 。</li>
+<li>移除 cgroup 资源限制，回收资源。</li>
+<li>移除分配的user namespace</li>
+<li>标注 pod 的最终状态。</li>
+</ol>
+<h3 id="p-podSyncer-SyncTerminatingPod"><a href="#p-podSyncer-SyncTerminatingPod" class="headerlink" title="p.podSyncer.SyncTerminatingPod"></a>p.podSyncer.SyncTerminatingPod</h3><p><code>SyncTerminatingPod</code>负责停止Pod内所有运行的容器，容器停止后，Pod的状态被置为<code>Terminated</code>，之后可以进行其余资源的清理。其代码实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> SyncTerminatingPod(_ context.Context, pod *v1.Pod, podStatus *kubecontainer.PodStatus, gracePeriod *<span class="hljs-type">int64</span>, podStatusFn <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(*v1.PodStatus)</span></span>) <span class="hljs-type">error</span> &#123;<br>	<span class="hljs-comment">// TODO(#113606): connect this with the incoming context parameter, which comes from the pod worker.</span><br>	<span class="hljs-comment">// Currently, using that context causes test failures.</span><br>	ctx, otelSpan := kl.tracer.Start(context.Background(), <span class="hljs-string">&quot;syncTerminatingPod&quot;</span>, trace.WithAttributes(<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.uid&quot;</span>, <span class="hljs-type">string</span>(pod.UID)),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod&quot;</span>, klog.KObj(pod).String()),<br>		attribute.String(<span class="hljs-string">&quot;k8s.pod.name&quot;</span>, pod.Name),<br>		attribute.String(<span class="hljs-string">&quot;k8s.namespace.name&quot;</span>, pod.Namespace),<br>	))<br>	<span class="hljs-keyword">defer</span> otelSpan.End()<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatingPod enter&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-keyword">defer</span> klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatingPod exit&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	apiPodStatus := kl.generateAPIPodStatus(pod, podStatus, <span class="hljs-literal">false</span>)<br>	<span class="hljs-keyword">if</span> podStatusFn != <span class="hljs-literal">nil</span> &#123;<br>		podStatusFn(&amp;apiPodStatus)<br>	&#125;<br>	kl.statusManager.SetPodStatus(pod, apiPodStatus)<br><br>	<span class="hljs-keyword">if</span> gracePeriod != <span class="hljs-literal">nil</span> &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod terminating with grace period&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID, <span class="hljs-string">&quot;gracePeriod&quot;</span>, *gracePeriod)<br>	&#125; <span class="hljs-keyword">else</span> &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod terminating with grace period&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID, <span class="hljs-string">&quot;gracePeriod&quot;</span>, <span class="hljs-literal">nil</span>)<br>	&#125;<br><br>	kl.probeManager.StopLivenessAndStartup(pod)<br><br>	p := kubecontainer.ConvertPodStatusToRunningPod(kl.getRuntime().Type(), podStatus)<br>	<span class="hljs-keyword">if</span> err := kl.killPod(ctx, pod, p, gracePeriod); err != <span class="hljs-literal">nil</span> &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, <span class="hljs-string">&quot;error killing pod: %v&quot;</span>, err)<br>		<span class="hljs-comment">// there was an error killing the pod, so we return that error directly</span><br>		utilruntime.HandleError(err)<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br><br>	<span class="hljs-comment">// Once the containers are stopped, we can stop probing for liveness and readiness.</span><br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> once a pod is terminal, certain probes (liveness exec) could be stopped immediately after</span><br>	<span class="hljs-comment">//   the detection of a container shutdown or (for readiness) after the first failure. Tracked as</span><br>	<span class="hljs-comment">//   https://github.com/kubernetes/kubernetes/issues/107894 although may not be worth optimizing.</span><br>	kl.probeManager.RemovePod(pod)<br><br>	<span class="hljs-comment">// Guard against consistency issues in KillPod implementations by checking that there are no</span><br>	<span class="hljs-comment">// running containers. This method is invoked infrequently so this is effectively free and can</span><br>	<span class="hljs-comment">// catch race conditions introduced by callers updating pod status out of order.</span><br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> have KillPod return the terminal status of stopped containers and write that into the</span><br>	<span class="hljs-comment">//  cache immediately</span><br>	podStatus, err := kl.containerRuntime.GetPodStatus(ctx, pod.UID, pod.Name, pod.Namespace)<br>	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> &#123;<br>		klog.ErrorS(err, <span class="hljs-string">&quot;Unable to read pod status prior to final pod termination&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br>	<span class="hljs-keyword">var</span> runningContainers []<span class="hljs-type">string</span><br>	<span class="hljs-keyword">type</span> container <span class="hljs-keyword">struct</span> &#123;<br>		Name       <span class="hljs-type">string</span><br>		State      <span class="hljs-type">string</span><br>		ExitCode   <span class="hljs-type">int</span><br>		FinishedAt <span class="hljs-type">string</span><br>	&#125;<br>	<span class="hljs-keyword">var</span> containers []container<br>	klogV := klog.V(<span class="hljs-number">4</span>)<br>	klogVEnabled := klogV.Enabled()<br>	<span class="hljs-keyword">for</span> _, s := <span class="hljs-keyword">range</span> podStatus.ContainerStatuses &#123;<br>		<span class="hljs-keyword">if</span> s.State == kubecontainer.ContainerStateRunning &#123;<br>			runningContainers = <span class="hljs-built_in">append</span>(runningContainers, s.ID.String())<br>		&#125;<br>		<span class="hljs-keyword">if</span> klogVEnabled &#123;<br>			containers = <span class="hljs-built_in">append</span>(containers, container&#123;Name: s.Name, State: <span class="hljs-type">string</span>(s.State), ExitCode: s.ExitCode, FinishedAt: s.FinishedAt.UTC().Format(time.RFC3339Nano)&#125;)<br>		&#125;<br>	&#125;<br>	<span class="hljs-keyword">if</span> klogVEnabled &#123;<br>		sort.Slice(containers, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i, j <span class="hljs-type">int</span>)</span></span> <span class="hljs-type">bool</span> &#123; <span class="hljs-keyword">return</span> containers[i].Name &lt; containers[j].Name &#125;)<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Post-termination container state&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID, <span class="hljs-string">&quot;containers&quot;</span>, containers)<br>	&#125;<br>	<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(runningContainers) &gt; <span class="hljs-number">0</span> &#123;<br>		<span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">&quot;detected running containers after a successful KillPod, CRI violation: %v&quot;</span>, runningContainers)<br>	&#125;<br><br>	<span class="hljs-comment">// <span class="hljs-doctag">NOTE:</span> resources must be unprepared AFTER all containers have stopped</span><br>	<span class="hljs-comment">// and BEFORE the pod status is changed on the API server</span><br>	<span class="hljs-comment">// to avoid race conditions with the resource deallocation code in kubernetes core.</span><br>	<span class="hljs-keyword">if</span> utilfeature.DefaultFeatureGate.Enabled(features.DynamicResourceAllocation) &#123;<br>		<span class="hljs-keyword">if</span> err := kl.UnprepareDynamicResources(pod); err != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">return</span> err<br>		&#125;<br>	&#125;<br><br>	<span class="hljs-comment">// Compute and update the status in cache once the pods are no longer running.</span><br>	<span class="hljs-comment">// The computation is done here to ensure the pod status used for it contains</span><br>	<span class="hljs-comment">// information about the container end states (including exit codes) - when</span><br>	<span class="hljs-comment">// SyncTerminatedPod is called the containers may already be removed.</span><br>	apiPodStatus = kl.generateAPIPodStatus(pod, podStatus, <span class="hljs-literal">true</span>)<br>	kl.statusManager.SetPodStatus(pod, apiPodStatus)<br><br>	<span class="hljs-comment">// we have successfully stopped all containers, the pod is terminating, our status is &quot;done&quot;</span><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod termination stopped all running containers&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>&#125;<br></code></pre></td></tr></table></figure>
+
+<ol>
+<li>调用 <code>kl.killPod()</code> 容器运行时终止该 pod 上的所有容器，该接口会在容器完全终止前阻塞住。</li>
+<li>停止 <code>liveness</code> 和 <code>startup</code> 探针。</li>
+<li>更新 pod 状态到缓存中，检查是否所有容器都已经终止。</li>
+<li>如果收到错误返回，则会在下一次循环继续。</li>
+</ol>
+<h3 id="p-podSyncer-SyncTerminatingRuntimePod"><a href="#p-podSyncer-SyncTerminatingRuntimePod" class="headerlink" title="p.podSyncer.SyncTerminatingRuntimePod()"></a>p.podSyncer.SyncTerminatingRuntimePod()</h3><p><code>SyncTerminatingRuntimePod</code>负责清理找不到配置的<code>RuntimePod</code>的Pod的容器，其代码实现为：</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(kl *Kubelet)</span></span> SyncTerminatingRuntimePod(_ context.Context, runningPod *kubecontainer.Pod) <span class="hljs-type">error</span> &#123;<br>	<span class="hljs-comment">// TODO(#113606): connect this with the incoming context parameter, which comes from the pod worker.</span><br>	<span class="hljs-comment">// Currently, using that context causes test failures.</span><br>	ctx := context.Background()<br>	pod := runningPod.ToAPIPod()<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatingRuntimePod enter&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-keyword">defer</span> klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;SyncTerminatingRuntimePod exit&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br><br>	<span class="hljs-comment">// we kill the pod directly since we have lost all other information about the pod.</span><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Orphaned running pod terminating without grace period&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> this should probably be zero, to bypass any waiting (needs fixes in container runtime)</span><br>	gracePeriod := <span class="hljs-type">int64</span>(<span class="hljs-number">1</span>)<br>	<span class="hljs-keyword">if</span> err := kl.killPod(ctx, pod, *runningPod, &amp;gracePeriod); err != <span class="hljs-literal">nil</span> &#123;<br>		kl.recorder.Eventf(pod, v1.EventTypeWarning, events.FailedToKillPod, <span class="hljs-string">&quot;error killing pod: %v&quot;</span>, err)<br>		<span class="hljs-comment">// there was an error killing the pod, so we return that error directly</span><br>		utilruntime.HandleError(err)<br>		<span class="hljs-keyword">return</span> err<br>	&#125;<br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod termination stopped all running orphaned containers&quot;</span>, <span class="hljs-string">&quot;pod&quot;</span>, klog.KObj(pod), <span class="hljs-string">&quot;podUID&quot;</span>, pod.UID)<br>	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span><br>&#125;<br></code></pre></td></tr></table></figure>
+<p>确保 kubelet 识别到它已经没有任何容器运行了。</p>
+<h3 id="p-completeTerminated-podUID"><a href="#p-completeTerminated-podUID" class="headerlink" title="p.completeTerminated(podUID)"></a>p.completeTerminated(podUID)</h3><p>这一步是终止 podWorker ，关停 PodUpdates channel 通道，并将 pod 从缓存中移除。</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> completeTerminated(podUID types.UID) &#123;<br>	p.podLock.Lock()<br>	<span class="hljs-keyword">defer</span> p.podLock.Unlock()<br><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod is complete and the worker can now stop&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br><br>	p.cleanupPodUpdates(podUID)<br><br>	status, ok := p.podSyncStatuses[podUID]<br>	<span class="hljs-keyword">if</span> !ok &#123;<br>		<span class="hljs-keyword">return</span><br>	&#125;<br>	<span class="hljs-keyword">if</span> status.terminatingAt.IsZero() &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod worker is complete but did not have terminatingAt set, likely programmer error&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>	&#125;<br>	<span class="hljs-keyword">if</span> status.terminatedAt.IsZero() &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod worker is complete but did not have terminatedAt set, likely programmer error&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>	&#125;<br>	status.finished = <span class="hljs-literal">true</span><br>	status.working = <span class="hljs-literal">false</span><br><br>	<span class="hljs-keyword">if</span> p.startedStaticPodsByFullname[status.fullname] == podUID &#123;<br>		<span class="hljs-built_in">delete</span>(p.startedStaticPodsByFullname, status.fullname)<br>	&#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="p-completeTerminating-podUID"><a href="#p-completeTerminating-podUID" class="headerlink" title="p.completeTerminating(podUID)"></a>p.completeTerminating(podUID)</h3><p>这一意味着 pod 上的容器已经全部终止，且容器不会在后面的同步逻辑中继续启动了，更新 pod 相关状态，准备被后续的清理逻辑接管，并确保不被后面的同步逻辑同步，确保能被 kubelet 始别到它已经没有任何容器运行了</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> completeTerminating(podUID types.UID) &#123;<br>	p.podLock.Lock()<br>	<span class="hljs-keyword">defer</span> p.podLock.Unlock()<br><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod terminated all containers successfully&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br><br>	status, ok := p.podSyncStatuses[podUID]<br>	<span class="hljs-keyword">if</span> !ok &#123;<br>		<span class="hljs-keyword">return</span><br>	&#125;<br><br>	<span class="hljs-comment">// update the status of the pod</span><br>	<span class="hljs-keyword">if</span> status.terminatingAt.IsZero() &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod worker was terminated but did not have terminatingAt set, likely programmer error&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>	&#125;<br>	status.terminatedAt = p.clock.Now()<br>	<span class="hljs-keyword">for</span> _, ch := <span class="hljs-keyword">range</span> status.notifyPostTerminating &#123;<br>		<span class="hljs-built_in">close</span>(ch)<br>	&#125;<br>	status.notifyPostTerminating = <span class="hljs-literal">nil</span><br>	status.statusPostTerminating = <span class="hljs-literal">nil</span><br><br>	<span class="hljs-comment">// the pod has now transitioned to terminated and we want to run syncTerminatedPod</span><br>	<span class="hljs-comment">// as soon as possible, so if no update is already waiting queue a synthetic update</span><br>	p.requeueLastPodUpdate(podUID, status)<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="p-completeSync-podUID"><a href="#p-completeSync-podUID" class="headerlink" title="p.completeSync(podUID)"></a>p.completeSync(podUID)</h3><p>这一步是处理在自然的生命周期内，pod 被终止了。类似驱逐、api驱使删除等非自然生命周期的处理，是走 UpdatePod() 这个接口的。</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> completeSync(podUID types.UID) &#123;<br>	p.podLock.Lock()<br>	<span class="hljs-keyword">defer</span> p.podLock.Unlock()<br><br>	klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod indicated lifecycle completed naturally and should now terminate&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br><br>	status, ok := p.podSyncStatuses[podUID]<br>	<span class="hljs-keyword">if</span> !ok &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod had no status in completeSync, programmer error?&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>		<span class="hljs-keyword">return</span><br>	&#125;<br><br>	<span class="hljs-comment">// update the status of the pod</span><br>	<span class="hljs-keyword">if</span> status.terminatingAt.IsZero() &#123;<br>		status.terminatingAt = p.clock.Now()<br>	&#125; <span class="hljs-keyword">else</span> &#123;<br>		klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pod worker attempted to set terminatingAt twice, likely programmer error&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>	&#125;<br>	status.startedTerminating = <span class="hljs-literal">true</span><br><br>	<span class="hljs-comment">// the pod has now transitioned to terminating and we want to run syncTerminatingPod</span><br>	<span class="hljs-comment">// as soon as possible, so if no update is already waiting queue a synthetic update</span><br>	p.requeueLastPodUpdate(podUID, status)<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="p-completeWork-podUID-phaseTransition-err"><a href="#p-completeWork-podUID-phaseTransition-err" class="headerlink" title="p.completeWork(podUID, phaseTransition, err)"></a>p.completeWork(podUID, phaseTransition, err)</h3><p>当 pod 同步出现错误时调用该接口，接口逻辑是检查错误类型，根据错误类型将 pod 立即或者按一定时间间隔重新加入到同步队列，直到 pod 完成同步</p>
+<figure class="highlight golang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><code class="hljs golang"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(p *podWorkers)</span></span> completeWork(podUID types.UID, phaseTransition <span class="hljs-type">bool</span>, syncErr <span class="hljs-type">error</span>) &#123;<br>	<span class="hljs-comment">// Requeue the last update if the last sync returned error.</span><br>	<span class="hljs-keyword">switch</span> &#123;<br>	<span class="hljs-keyword">case</span> phaseTransition:<br>		p.workQueue.Enqueue(podUID, <span class="hljs-number">0</span>)<br>	<span class="hljs-keyword">case</span> syncErr == <span class="hljs-literal">nil</span>:<br>		<span class="hljs-comment">// No error; requeue at the regular resync interval.</span><br>		p.workQueue.Enqueue(podUID, wait.Jitter(p.resyncInterval, workerResyncIntervalJitterFactor))<br>	<span class="hljs-keyword">case</span> strings.Contains(syncErr.Error(), NetworkNotReadyErrorMsg):<br>		<span class="hljs-comment">// Network is not ready; back off for short period of time and retry as network might be ready soon.</span><br>		p.workQueue.Enqueue(podUID, wait.Jitter(backOffOnTransientErrorPeriod, workerBackOffPeriodJitterFactor))<br>	<span class="hljs-keyword">default</span>:<br>		<span class="hljs-comment">// Error occurred during the sync; back off and then retry.</span><br>		p.workQueue.Enqueue(podUID, wait.Jitter(p.backOffPeriod, workerBackOffPeriodJitterFactor))<br>	&#125;<br><br>	<span class="hljs-comment">// if there is a pending update for this worker, requeue immediately, otherwise</span><br>	<span class="hljs-comment">// clear working status</span><br>	p.podLock.Lock()<br>	<span class="hljs-keyword">defer</span> p.podLock.Unlock()<br>	<span class="hljs-keyword">if</span> status, ok := p.podSyncStatuses[podUID]; ok &#123;<br>		<span class="hljs-keyword">if</span> status.pendingUpdate != <span class="hljs-literal">nil</span> &#123;<br>			<span class="hljs-keyword">select</span> &#123;<br>			<span class="hljs-keyword">case</span> p.podUpdates[podUID] &lt;- <span class="hljs-keyword">struct</span>&#123;&#125;&#123;&#125;:<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Requeueing pod due to pending update&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>			<span class="hljs-keyword">default</span>:<br>				klog.V(<span class="hljs-number">4</span>).InfoS(<span class="hljs-string">&quot;Pending update already queued&quot;</span>, <span class="hljs-string">&quot;podUID&quot;</span>, podUID)<br>			&#125;<br>		&#125; <span class="hljs-keyword">else</span> &#123;<br>			status.working = <span class="hljs-literal">false</span><br>		&#125;<br>	&#125;<br>&#125;<br><br></code></pre></td></tr></table></figure>
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/kubernetes/" class="category-chain-item">kubernetes</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/kubernetes/" class="print-no-link">#kubernetes</a>
+      
+        <a href="/tags/kubelet/" class="print-no-link">#kubelet</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Kubelet详解（二）- Pod同步流程</div>
+      <div>https://chriskery.github.io/2023/12/20/Kubelet详解（二）/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>作者</div>
+          <div>Chris Kery</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>发布于</div>
+          <div>2023年12月20日</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>许可协议</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - 署名">
+                    <i class="iconfont icon-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2024/01/22/Hadoop-Operator/" title="Hadoop Operator">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Hadoop Operator</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2023/12/19/kubernetes-klog%E7%AE%80%E4%BB%8B/" title="kubernetes-klog简介">
+                        <span class="hidden-mobile">kubernetes-klog简介</span>
+                        <span class="visible-mobile">下一篇</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>目录</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+    <div class="statistics">
+  
+  
+
+  
+    
+      <span id="busuanzi_container_site_pv" style="display: none">
+        总访问量 
+        <span id="busuanzi_value_site_pv"></span>
+         次
+      </span>
+    
+    
+      <span id="busuanzi_container_site_uv" style="display: none">
+        总访客数 
+        <span id="busuanzi_value_site_uv"></span>
+         人
+      </span>
+    
+    
+  
+</div>
+
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    window.tocbot.init(Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc));
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/4.3.1/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+  <script defer src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">博客在允许 JavaScript 运行的环境下浏览效果更佳</div>
+  </noscript>
+</body>
+</html>

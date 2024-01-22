@@ -16,27 +16,29 @@
   <meta name="author" content="Chris Kery">
   <meta name="keywords" content="">
   
-    <meta name="description" content="目标创建一个简单的深度神经网络（DNN），训练神经网络识别衣物 数据准备我们使用名为 Fashion MNIST 的常见数据集中识别衣物。该数据集包含 70000 种衣物，分为 10 个不同的类别。每件衣物都采用 28x28 的灰度图像。下面是一些示例：  与数据集关联的标签如下： 标签说明0T 恤衫&#x2F;上衣1裤子2套衫3裙子4外套5凉鞋6衬衫7运动鞋8包9踝靴  首先导入Tensorflow 12">
+    <meta name="description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
 <meta property="og:type" content="article">
-<meta property="og:title" content="ML入门-使用TensorFlow构建计算机视觉模型">
-<meta property="og:url" content="https://chriskery.github.io/2023/12/05/ML%E5%85%A5%E9%97%A8-%E4%BD%BF%E7%94%A8TensorFlow%E6%9E%84%E5%BB%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E8%A7%86%E8%A7%89%E6%A8%A1%E5%9E%8B/index.html">
+<meta property="og:title" content="Kubelet详解（一）- Kubelet启动流程">
+<meta property="og:url" content="https://chriskery.github.io/2023/11/30/Kubelet%E8%AF%A6%E8%A7%A3%EF%BC%88%E4%B8%80%EF%BC%89/index.html">
 <meta property="og:site_name" content="Chriskery&#39;s Blog">
-<meta property="og:description" content="目标创建一个简单的深度神经网络（DNN），训练神经网络识别衣物 数据准备我们使用名为 Fashion MNIST 的常见数据集中识别衣物。该数据集包含 70000 种衣物，分为 10 个不同的类别。每件衣物都采用 28x28 的灰度图像。下面是一些示例：  与数据集关联的标签如下： 标签说明0T 恤衫&#x2F;上衣1裤子2套衫3裙子4外套5凉鞋6衬衫7运动鞋8包9踝靴  首先导入Tensorflow 12">
+<meta property="og:description" content="kubelet简介 kubelet 的功能介绍：  kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 hostname；覆盖 host 的参数；或者云提供商指定的逻辑。 kubelet 基于 PodSpec 工作。PodSpec 是用 YAML 或者 JSON 对象来描述 Pod。Kubelet 接受通过各种机制（">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-2-computervision/img/tenseimg10.png?hl=zh-cn">
-<meta property="og:image" content="https://developers.google.com/static/codelabs/tensorflow-2-computervision/img/tenseimg20.png?hl=zh-cn">
-<meta property="article:published_time" content="2023-12-05T09:11:24.000Z">
-<meta property="article:modified_time" content="2024-01-22T14:00:29.670Z">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png">
+<meta property="og:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png">
+<meta property="article:published_time" content="2023-11-30T14:37:02.000Z">
+<meta property="article:modified_time" content="2024-01-22T14:00:29.663Z">
 <meta property="article:author" content="Chris Kery">
-<meta property="article:tag" content="ml">
+<meta property="article:tag" content="kubernetes">
+<meta property="article:tag" content="kubelet">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://developers.google.com/static/codelabs/tensorflow-2-computervision/img/tenseimg10.png?hl=zh-cn">
+<meta name="twitter:image" content="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png">
   
   
     <meta name="referrer" content="no-referrer-when-downgrade">
   
   
-  <title>ML入门-使用TensorFlow构建计算机视觉模型 - Chriskery&#39;s Blog</title>
+  <title>Kubelet详解（一）- Kubelet启动流程 - Chriskery&#39;s Blog</title>
 
   <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
 
@@ -202,7 +204,7 @@
       <div class="banner-text text-center fade-in-up">
         <div class="h2">
           
-            <span id="subtitle" data-typed-text="ML入门-使用TensorFlow构建计算机视觉模型"></span>
+            <span id="subtitle" data-typed-text="Kubelet详解（一）- Kubelet启动流程"></span>
           
         </div>
 
@@ -213,8 +215,8 @@
     
       <span class="post-meta">
         <i class="iconfont icon-date-fill" aria-hidden="true"></i>
-        <time datetime="2023-12-05 17:11" pubdate>
-          2023年12月5日 下午
+        <time datetime="2023-11-30 22:37" pubdate>
+          2023年11月30日 晚上
         </time>
       </span>
     
@@ -225,7 +227,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          2.5k 字
+          3.3k 字
         
       </span>
     
@@ -236,7 +238,7 @@
         
         
         
-          21 分钟
+          28 分钟
         
       </span>
     
@@ -273,56 +275,114 @@
       <div class="container nopadding-x-md" id="board-ctn">
         <div id="board">
           <article class="post-content mx-auto">
-            <h1 id="seo-header">ML入门-使用TensorFlow构建计算机视觉模型</h1>
+            <h1 id="seo-header">Kubelet详解（一）- Kubelet启动流程</h1>
             
             
               <div class="markdown-body">
                 
-                <h2 id="目标"><a href="#目标" class="headerlink" title="目标"></a>目标</h2><p>创建一个简单的深度神经网络（DNN），训练神经网络识别衣物</p>
-<h2 id="数据准备"><a href="#数据准备" class="headerlink" title="数据准备"></a>数据准备</h2><p>我们使用名为 <a target="_blank" rel="noopener" href="https://github.com/zalandoresearch/fashion-mnist">Fashion MNIST</a> 的常见数据集中识别衣物。该数据集包含 70000 种衣物，分为 10 个不同的类别。每件衣物都采用 28x28 的灰度图像。下面是一些示例：</p>
-<p><img src="https://developers.google.com/static/codelabs/tensorflow-2-computervision/img/tenseimg10.png?hl=zh-cn" srcset="/img/loading.gif" lazyload></p>
-<p>与数据集关联的标签如下：</p>
-<table><tbody><tr><td colspan="1" rowspan="1"><p><strong>标签</strong></p></td><td colspan="1" rowspan="1"><p><strong>说明</strong></p></td></tr><tr><td colspan="1" rowspan="1"><p>0</p></td><td colspan="1" rowspan="1"><p>T 恤衫/上衣</p></td></tr><tr><td colspan="1" rowspan="1"><p>1</p></td><td colspan="1" rowspan="1"><p>裤子</p></td></tr><tr><td colspan="1" rowspan="1"><p>2</p></td><td colspan="1" rowspan="1"><p>套衫</p></td></tr><tr><td colspan="1" rowspan="1"><p>3</p></td><td colspan="1" rowspan="1"><p>裙子</p></td></tr><tr><td colspan="1" rowspan="1"><p>4</p></td><td colspan="1" rowspan="1"><p>外套</p></td></tr><tr><td colspan="1" rowspan="1"><p>5</p></td><td colspan="1" rowspan="1"><p>凉鞋</p></td></tr><tr><td colspan="1" rowspan="1"><p>6</p></td><td colspan="1" rowspan="1"><p>衬衫</p></td></tr><tr><td colspan="1" rowspan="1"><p>7</p></td><td colspan="1" rowspan="1"><p>运动鞋</p></td></tr><tr><td colspan="1" rowspan="1"><p>8</p></td><td colspan="1" rowspan="1"><p>包</p></td></tr><tr><td colspan="1" rowspan="1"><p>9</p></td><td colspan="1" rowspan="1"><p>踝靴</p></td></tr></tbody></table>
-
-<p>首先导入Tensorflow</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">import</span> tensorflow <span class="hljs-keyword">as</span> tf<br><span class="hljs-built_in">print</span>(tf.__version__)<br></code></pre></td></tr></table></figure>
-<p>获取Fashion MNIST数据集</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs python">mnist = tf.keras.datasets.fashion_mnist<br></code></pre></td></tr></table></figure>
-<p>在该对象上调用 load_data 会生成两组列表，分别是训练值(training_images)和测试值(training_labels)，它们分别表示衣物及其标签。test_images用作测试集，用来评价模型在未遇到的数据集上的泛化效果。</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs python">(training_images, training_labels), (test_images, test_labels) = mnist.load_data()<br></code></pre></td></tr></table></figure>
-
-<p>使用pyplot查看数据示例</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">import</span> matplotlib.pyplot <span class="hljs-keyword">as</span> plt<br>plt.imshow(training_images[<span class="hljs-number">0</span>])<br><span class="hljs-built_in">print</span>(training_labels[<span class="hljs-number">0</span>])<br><span class="hljs-built_in">print</span>(training_images[<span class="hljs-number">0</span>])<br></code></pre></td></tr></table></figure>
-<p>其输出如下所示：<br><img src="https://developers.google.com/static/codelabs/tensorflow-2-computervision/img/tenseimg20.png?hl=zh-cn" srcset="/img/loading.gif" lazyload></p>
-<p>所有值都是 0 到 255 之间的整数。在训练神经网络时，所有值在 0 到 1 之间处理起来更轻松，此过程称为归一化。幸运的是，Python 提供了一种无需循环便可归一化列表的简单方法</p>
-<h2 id="设计模型"><a href="#设计模型" class="headerlink" title="设计模型"></a>设计模型</h2><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs python">model = tf.keras.models.Sequential([tf.keras.layers.Flatten(),<br>                                    tf.keras.layers.Dense(<span class="hljs-number">128</span>, activation=tf.nn.relu),<br>                                    tf.keras.layers.Dense(<span class="hljs-number">10</span>, activation=tf.nn.softmax)])<br></code></pre></td></tr></table></figure>
-<p>这里准备了一个三层的模型。</p>
+                <h2 id="kubelet简介"><a href="#kubelet简介" class="headerlink" title="kubelet简介"></a>kubelet简介</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210613091144.png" srcset="/img/loading.gif" lazyload alt="Kubernetes 的架构图"></p>
+<p>kubelet 的功能介绍：</p>
 <ul>
-<li><code>Sequential</code> 定义了神经网络中的层序列。</li>
-<li><code>Flatten</code> 会接受一个正方形并将其转换为一维矢量。</li>
-<li><code>Dense</code> 会添加一层神经元。</li>
-<li><code>Activation</code> 函数会告知各层神经元要执行的操作。选项有很多，但目前只采用以下选项：</li>
-<li><code>Relu</code> 实际上意味着，如果 X 大于 0，则返回 X，否则返回 0。它只会将 0 或更大的值传递到网络中的下一层。</li>
-<li><code>Softmax</code> 会接受一组值，并能有效地选择最大的值。例如，如果最后一层的输出是 [0.1, 0.1, 0.05, 0.1, 9.5, 0.1, 0.05, 0.05, 0.05]，那么您无需通过排序来获取最大值，它会返回 [0,0,0,0,1,0,0,0,0]。</li>
+<li>kubelet 是每个 Node 节点上都运行的主要“节点代理”。使用如下的一个向 apiserver 注册 Node 节点：主机的 <code>hostname</code>；覆盖 <code>host</code> 的参数；或者云提供商指定的逻辑。</li>
+<li>kubelet 基于 <code>PodSpec</code> 工作。<code>PodSpec</code> 是用 <code>YAML</code> 或者 <code>JSON</code> 对象来描述 Pod。Kubelet 接受通过各种机制（主要是 apiserver）提供的一组 <code>PodSpec</code>，并确保里面描述的容器良好运行。</li>
 </ul>
-<h2 id="编译和训练模型"><a href="#编译和训练模型" class="headerlink" title="编译和训练模型"></a>编译和训练模型</h2><p>现在已定义了模型，接下来要做的是构建模型。我们来创建模型，先使用 optimizer 和 loss 函数编译模型，然后使用训练数据和标签训练模型。</p>
-<p>请注意，我们使用了 metrics&#x3D; 参数，这样的话，TensorFlow 可根据已知答案（标签）检查预测结果，从而报告训练准确率。</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs python">model.<span class="hljs-built_in">compile</span>(optimizer = tf.keras.optimizers.Adam(),<br>              loss = <span class="hljs-string">&#x27;sparse_categorical_crossentropy&#x27;</span>,<br>              metrics=[<span class="hljs-string">&#x27;accuracy&#x27;</span>])<br><br>model.fit(training_images, training_labels, epochs=<span class="hljs-number">5</span>)<br></code></pre></td></tr></table></figure>
-<p>model.fit 执行时，您会看到损失和准确率：</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs shell">Epoch 1/5<br>60000/60000 [=======] - 6s 101us/sample - loss: 0.4964 - acc: 0.8247<br>Epoch 2/5<br>60000/60000 [=======] - 5s 86us/sample - loss: 0.3720 - acc: 0.8656<br>Epoch 3/5<br>60000/60000 [=======] - 5s 85us/sample - loss: 0.3335 - acc: 0.8780<br>Epoch 4/5<br>60000/60000 [=======] - 6s 103us/sample - loss: 0.3134 - acc: 0.8844<br>Epoch 5/5<br>60000/60000 [=======] - 6s 94us/sample - loss: 0.2931 - acc: 0.8926<br></code></pre></td></tr></table></figure>
-<p>模型完成训练后，您会在最后一个周期结束时看到准确率值。类似如上所示的 0.8926。这表明您的神经网络对训练数据进行分类时的准确率约为 89%。换言之，它可以找出图像与标签之间的模式匹配，成功率达到 89%。</p>
-<h2 id="测试模型"><a href="#测试模型" class="headerlink" title="测试模型"></a>测试模型</h2><p>调用model.evaluate 并传入测试集，并报告每组的损失。</p>
-<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs python">model.evaluate(test_images, test_labels)<br></code></pre></td></tr></table></figure>
-<p>输出内容如下所示：<br>10000&#x2F;10000 [&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;] - 1s 56us&#x2F;sample - loss: 0.3365 - acc: 0.8789<br>[0.33648381242752073, 0.8789]</p>
-<p>该示例返回了 0.8789 的准确率，表示其准确率约为 88%。</p>
-<h2 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h2><ul>
-<li><p>经验法则1: 网络的第一层应与数据形状保持一致。图像的数据是28x28的图像，28 个包含 28 个神经元的层将不可行，因此将 28,28 平化为 784x1 更有意义。</p>
+<h2 id="kubelet-架构"><a href="#kubelet-架构" class="headerlink" title="kubelet 架构"></a>kubelet 架构</h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210614215508.png" srcset="/img/loading.gif" lazyload alt="2021-06-14-21-55-08"></p>
+<h3 id="重要组件"><a href="#重要组件" class="headerlink" title="重要组件"></a>重要组件</h3><p>kubelet 的架构由 N 多的组件组成，下面简单介绍下比较重要的几个：</p>
+<h4 id="PLEG"><a href="#PLEG" class="headerlink" title="[PLEG]"></a>[PLEG]</h4><p>即 <strong>Pod Lifecycle Event Generator</strong>，字面意思 Pod 生命周期事件（<code>ContainerStarted</code>、<code>ContainerDied</code>、<code>ContainerRemoved</code>、<code>ContainerChanged</code>）生成器。</p>
+<p>其维护着 Pod 缓存；定期通过 <code>ContainerRuntime</code> 获取 Pod 的信息，与缓存中的信息比较，生成如上的事件；将事件写入其维护的通道（channel）中。</p>
+<h4 id="PodWorkers"><a href="#PodWorkers" class="headerlink" title="[PodWorkers]"></a>[PodWorkers]</h4><p>处理事件中 Pod 的同步。核心方法 <code>managePodLoop()</code> 间接调用 <code>kubelet.syncPod()</code> 完成 Pod 的同步：</p>
+<ul>
+<li>如果 Pod 正在被创建，记录其延迟</li>
+<li>生成 Pod 的 API Status，即 <code>v1.PodStatus</code>：从运行时的 status 转换成 api status</li>
+<li>记录 Pod 从 <code>pending</code> 到 <code>running</code> 的耗时</li>
+<li>在 <code>StatusManager</code> 中更新 pod 的状态</li>
+<li>杀掉不应该运行的 Pod</li>
+<li>如果网络插件未就绪，只启动使用了主机网络（host network）的 Pod</li>
+<li>如果 static pod 不存在，为其创建镜像（Mirror）Pod</li>
+<li>为 Pod 创建文件系统目录：Pod 目录、卷目录、插件目录</li>
+<li>使用 <code>VolumeManager</code> 为 Pod 挂载卷</li>
+<li>获取 image pull secrets</li>
+<li>调用容器运行时（container runtime）的 <code>#SyncPod()</code> 方法</li>
+</ul>
+<h4 id="PodManager"><a href="#PodManager" class="headerlink" title="PodManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podmanager">PodManager</a></h4><p>存储 Pod 的期望状态，kubelet 服务的不同渠道的 Pod</p>
+<h4 id="StatsProvider"><a href="#StatsProvider" class="headerlink" title="StatsProvider"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#statsprovider">StatsProvider</a></h4><p>提供节点和容器的统计信息，有 <code>cAdvisor</code> 和 <code>CRI</code> 两种实现。</p>
+<h4 id="ContainerRuntime"><a href="#ContainerRuntime" class="headerlink" title="ContainerRuntime"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#containerruntime">ContainerRuntime</a></h4><p>顾名思义，容器运行时。与遵循 CRI 规范的高级容器运行时进行交互。</p>
+<h4 id="Deps-PodConfig"><a href="#Deps-PodConfig" class="headerlink" title="Deps.PodConfig"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#depspodconfig">Deps.PodConfig</a></h4><p>PodConfig 是一个配置多路复用器，它将许多 Pod 配置源合并成一个单一的一致结构，然后按顺序向监听器传递增量变更通知。</p>
+<p>配置源有：文件、apiserver、HTTP</p>
+<h4 id="SyncLoop"><a href="#SyncLoop" class="headerlink" title="SyncLoop"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">SyncLoop</a></h4><p>接收来自 <code>PodConfig</code> 的 Pod 变更通知、定时任务、<code>PLEG</code> 的事件，以及 <code>ProbeManager</code> 的事件，将 Pod 同步到<strong>期望状态</strong>。</p>
+<h4 id="PodAdmitHandlers"><a href="#PodAdmitHandlers" class="headerlink" title="PodAdmitHandlers"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#podadmithandlers">PodAdmitHandlers</a></h4><p>Pod admission 过程中调用的一系列处理器，比如 eviction handler（节点内存有压力时，不会驱逐 QoS 设置为 <code>BestEffort</code> 的 Pod）、shutdown admit handler（当节点关闭时，不处理 pod 的同步操作）等。</p>
+<h4 id="OOMWatcher"><a href="#OOMWatcher" class="headerlink" title="OOMWatcher"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#oomwatcher">OOMWatcher</a></h4><p>从系统日志中获取容器的 OOM 日志，将其封装成事件并记录。</p>
+<h4 id="VolumeManger"><a href="#VolumeManger" class="headerlink" title="VolumeManger"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#volumemanger">VolumeManger</a></h4><p>VolumeManager 运行一组异步循环，根据在此节点上调度的 pod 确定需要附加&#x2F;挂载&#x2F;卸载&#x2F;分离哪些卷并执行操作。</p>
+<h4 id="CertificateManager"><a href="#CertificateManager" class="headerlink" title="CertificateManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#certificatemanager">CertificateManager</a></h4><p>处理证书轮换。</p>
+<h4 id="ProbeManager"><a href="#ProbeManager" class="headerlink" title="ProbeManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#probemanager">ProbeManager</a></h4><p>实际上包含了三种 Probe，提供 probe 结果缓存和通道。</p>
+<ul>
+<li>LivenessManager</li>
+<li>ReadinessManager</li>
+<li>StartupManager</li>
+</ul>
+<h4 id="EvictionManager"><a href="#EvictionManager" class="headerlink" title="EvictionManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#evictionmanager">EvictionManager</a></h4><p>监控 Node 节点的资源占用情况，根据驱逐规则驱逐 Pod 释放资源，缓解节点的压力。</p>
+<h4 id="PluginManager"><a href="#PluginManager" class="headerlink" title="PluginManager"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#pluginmanager">PluginManager</a></h4><p>PluginManager 运行一组异步循环，根据此节点确定哪些插件需要注册&#x2F;取消注册并执行。如 CSI 驱动和设备管理器插件（Device Plugin）。</p>
+<h5 id="CSI"><a href="#CSI" class="headerlink" title="CSI"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#csi">CSI</a></h5><p>Container Storage Interface，由存储厂商实现的存储驱动。</p>
+<h5 id="设备管理器插件（Device-Plugin）"><a href="#设备管理器插件（Device-Plugin）" class="headerlink" title="设备管理器插件（Device Plugin）"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E8%AE%BE%E5%A4%87%E7%AE%A1%E7%90%86%E5%99%A8%E6%8F%92%E4%BB%B6device-plugin">设备管理器插件（Device Plugin）</a></h5><p>Kubernetes 提供了一个 设备插件框架，你可以用它来将系统硬件资源发布到 Kubelet。</p>
+<p>供应商可以实现设备插件，由你手动部署或作为 DaemonSet 来部署，而不必定制 Kubernetes 本身的代码。目标设备包括 GPU、高性能 NIC、FPGA、 InfiniBand 适配器以及其他类似的、可能需要特定于供应商的初始化和设置的计算资源。</p>
+<h2 id="kubelet-的启动流程"><a href="#kubelet-的启动流程" class="headerlink" title="kubelet 的启动流程"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B">kubelet 的启动流程</a></h2><p>要分析 kubelet 的启动流程，可以从 kubelet 运行方式着手。找一个 Node 节点，很容易就能找到 kubelet 的进程。由于其是以 <code>systemd</code> 的方式启动，也可以通过 <code>systemctl</code> 查看其状态。</p>
+<h3 id="源码分析"><a href="#源码分析" class="headerlink" title="源码分析"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90">源码分析</a></h3><p>从 <code>git@github.com:kubernetes/kubernetes.git</code> 仓库获取代码，使用最新的 <code>release-1.21</code> 分支。</p>
+<ul>
+<li><code>cmd/kubelet/kubelet.go:35</code> 的 <code>main</code> 方法为程序入口。<ul>
+<li>调用 <code>NewKubeletCommand</code> 方法，创建 command</li>
+<li>执行 command<ul>
+<li><code>cmd/kubelet/app/server.go:434</code> 的 <code>Run</code> 方法。<ul>
+<li>调用 <code>RunKubelet</code> 方法。<ul>
+<li>调用 <code>createAndInitKubelet</code> 方法，创建并初始化 kubelet<ul>
+<li><code>pkg/kubelet/kubelet.go</code> 的 <code>NewMainKubelet</code> 方法，创建 kubelet的 各种组件。共十几个组件，见 <a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E6%9E%B6%E6%9E%84">kubelet 的构架</a>。</li>
+<li>调用 <code>BirtyCry</code> 方法：放出 <code>Starting</code> 事件</li>
+<li>调用 <code>StartGarbageCollection</code> 方法，开启 <code>ContainerGC</code> 和 <code>ImageGC</code></li>
+</ul>
 </li>
-<li><p>经验法则2: 最后一层中的神经元数量应该与您要分类的类的数量相匹配。</p>
+<li>调用 <code>startKubelet</code> 方法（大量使用 goroutine 和通道）<ul>
+<li>goroutine：<code>kubelet.Run()</code><ul>
+<li>初始化模块<ul>
+<li>metrics 相关</li>
+<li>创建文件系统目录目录</li>
+<li>创建容器日志目录</li>
+<li>启动 <code>ImageGCManager</code></li>
+<li>启动 <code>ServerCertificateManager</code></li>
+<li>启动 <code>OOMWatcher</code></li>
+<li>启动 <code>ResourceAnalyzer</code></li>
+</ul>
 </li>
-<li><p>经验法则3: In a nutshell, normalization reduces the complexity of the problem your network is trying to solve. This can potentially increase the accuracy of your model and speed up the training</p>
+<li>goroutine：<code>VolumeManager.Run()</code> 开始处理 Pod Volume 的卸载和挂载</li>
+<li>goroutine：状态更新 <code>fastStatusUpdateOnce()</code> （更新 Pod CIDR -&gt; 更新 <code>ContainerRuntime</code> 状态 -&gt; 更新 Node 节点状态）</li>
+<li>goroutine： <code>NodeLeaseController.Run()</code> 更新节点租约</li>
+<li>goroutine：<code>podKiller.PerformPodKillingWork</code> 杀掉未被正确处理的 pod</li>
+<li><code>StatusManager.Start()</code> 开始向 apiserver 更新 Pod 状态</li>
+<li><code>RuntimeClassManager.Start()</code></li>
+<li><code>PLEG.Start()</code>：持续从 <code>ContainerRuntime</code> 获取 Pod&#x2F;容器的状态，并与 kubelet 本地 cache 中的比较，生成对应的 <code>Event</code></li>
+<li><code>syncLoop()</code> 重点，**<em>持续监控并处理来自文件、apiserver、http 的变更</em>**。包括 Pod 的增加、更新、优雅删除、非优雅删除、调和。</li>
+</ul>
 </li>
 </ul>
+</li>
+</ul>
+</li>
+<li>启动 server，暴露 <code>/healthz</code> 端点</li>
+<li>通知 <code>systemd</code> <code>kuberlet</code> 服务已经启动</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="kubelet-的工作原理"><a href="#kubelet-的工作原理" class="headerlink" title="kubelet 的工作原理"></a><a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#kubelet-%E7%9A%84%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86">kubelet 的工作原理</a></h2><p><img src="https://atbug.oss-cn-hangzhou.aliyuncs.com/2021/06/15/20210615000611.png" srcset="/img/loading.gif" lazyload></p>
+<ol>
+<li>静态文件、apiserver 以及 HTTP 请求的 Pod 配置变更，被发送到 <code>kubelet.syncLoop</code></li>
+<li>PLEG 会定期通过容器运行时获取节点上 Pod 的状态，与其缓存中的 Pod 信息进行比较，封装成事件，进入 PLEG 的通道</li>
+<li>定期检查工作队列中的 Pod</li>
+<li>ProbeManager 的通道中的 Pod</li>
+<li>以上 1~4，都会进入 <code>syncLoopIteration</code>，并从对应的通道中获取到对应 Pod，将 Pod 的信息保存到 <code>PodManager</code>；然后分发给 <code>PodWorker</code>，[完成一些列的同步工作]</li>
+</ol>
+<p>转载自：<a target="_blank" rel="noopener" href="https://atbug.com/kubelet-source-code-analysis/#syncloop">https://atbug.com/kubelet-source-code-analysis/#syncloop</a></p>
 
                 
               </div>
@@ -341,7 +401,7 @@
     
       <span class="category-chain">
         
-  <a href="/categories/Machine-Learning/" class="category-chain-item">Machine Learning</a>
+  <a href="/categories/kubernetes/" class="category-chain-item">kubernetes</a>
   
   
 
@@ -356,7 +416,9 @@
     <div class="post-meta">
       <i class="iconfont icon-tags"></i>
       
-        <a href="/tags/ml/" class="print-no-link">#ml</a>
+        <a href="/tags/kubernetes/" class="print-no-link">#kubernetes</a>
+      
+        <a href="/tags/kubelet/" class="print-no-link">#kubelet</a>
       
     </div>
   
@@ -368,8 +430,8 @@
 
   <div class="license-box my-3">
     <div class="license-title">
-      <div>ML入门-使用TensorFlow构建计算机视觉模型</div>
-      <div>https://chriskery.github.io/2023/12/05/ML入门-使用TensorFlow构建计算机视觉模型/</div>
+      <div>Kubelet详解（一）- Kubelet启动流程</div>
+      <div>https://chriskery.github.io/2023/11/30/Kubelet详解（一）/</div>
     </div>
     <div class="license-meta">
       
@@ -381,7 +443,7 @@
       
         <div class="license-meta-item license-meta-date">
           <div>发布于</div>
-          <div>2023年12月5日</div>
+          <div>2023年11月30日</div>
         </div>
       
       
@@ -413,9 +475,9 @@
                   <article class="post-prev col-6">
                     
                     
-                      <a href="/2023/12/05/ML%E5%85%A5%E9%97%A8-%E4%BD%BF%E7%94%A8%E5%8D%B7%E7%A7%AF%E5%92%8C%E6%B1%A0%E5%8C%96%E5%A2%9E%E5%BC%BA%E8%AE%A1%E7%AE%97%E6%9C%BA%E8%A7%86%E8%A7%89%E6%A8%A1%E5%9E%8B/" title="ML入门-使用卷积和池化增强计算机视觉模型">
+                      <a href="/2023/11/30/Kubelet%E8%AF%A6%E8%A7%A3/" title="Kubelet详解">
                         <i class="iconfont icon-arrowleft"></i>
-                        <span class="hidden-mobile">ML入门-使用卷积和池化增强计算机视觉模型</span>
+                        <span class="hidden-mobile">Kubelet详解</span>
                         <span class="visible-mobile">上一篇</span>
                       </a>
                     
@@ -423,8 +485,8 @@
                   <article class="post-next col-6">
                     
                     
-                      <a href="/2023/12/05/ML%E5%85%A5%E9%97%A8-%E6%9C%BA%E5%99%A8%E5%AD%A6%E4%B9%A0%E6%A6%82%E5%BF%B5%E4%BB%8B%E7%BB%8D/" title="ML入门-机器学习概念介绍">
-                        <span class="hidden-mobile">ML入门-机器学习概念介绍</span>
+                      <a href="/2023/11/30/Containerd%E8%AF%A6%E8%A7%A3/" title="Containerd详解">
+                        <span class="hidden-mobile">Containerd详解</span>
                         <span class="visible-mobile">下一篇</span>
                         <i class="iconfont icon-arrowright"></i>
                       </a>
