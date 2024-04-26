@@ -2,6 +2,10 @@
 title: Hadoop Operator
 date: 2024-01-22 22:01:48
 tags:
+- hadoop
+- yarn
+categories:
+- bigData
 ---
 项目地址：https://github.com/chriskery/hadoop-operator
 
